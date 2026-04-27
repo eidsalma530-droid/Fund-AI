@@ -106,7 +106,7 @@ const Navbar = () => {
                             whileTap={{ scale: 0.95 }}
                         >
                             <div className="w-10 h-10 rounded-xl overflow-hidden flex items-center justify-center">
-                                <img src="/logo.png" alt="FundAI Logo" className="w-full h-full object-contain" />
+                                <img src="/LOGO.png" alt="FundAI Logo" className="w-full h-full object-contain" />
                             </div>
                             <span className="text-2xl font-bold gradient-text hidden sm:inline">FundAI</span>
                         </motion.div>

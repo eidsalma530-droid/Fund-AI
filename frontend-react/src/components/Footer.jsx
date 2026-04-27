@@ -44,7 +44,7 @@ const Footer = () => {
                     <div className="col-span-2 md:col-span-1">
                         <Link to="/" className="inline-flex items-center gap-2 mb-4">
                             <div className="w-9 h-9 rounded-lg overflow-hidden">
-                                <img src="/logo.png" alt="FundAI" className="w-full h-full object-contain" />
+                                <img src="/LOGO.png" alt="FundAI" className="w-full h-full object-contain" />
                             </div>
                             <span className="text-xl font-bold gradient-text">FundAI</span>
                         </Link>
