@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Browse campaigns by category - FundAI">
+    <title>Categories - FundAI</title>
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+
+<body>
+    <!-- Navbar -->
+    <nav class="navbar" id="navbar">
+        <div class="container">
+            <a href="index.html" class="logo">
+                <div class="logo-icon"><img src="logo.png" alt="FundAI Logo"></div>
+                <span class="gradient-text">FundAI</span>
+            </a>
+            <div class="nav-links">
+                <a href="campaigns.html" class="nav-link">All Campaigns</a>
+                <a href="categories.html" class="nav-link active">Categories</a>
+            </div>
+            <div class="nav-auth" id="nav-auth"></div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="section" style="padding-top: 120px;">
+        <div class="container">
+            <div class="text-center mb-xl">
+                <h1 class="animate-fade-in-up">Browse by <span class="gradient-text">Category</span></h1>
+                <p class="text-secondary">Discover campaigns in your favorite categories</p>
+            </div>
+
+            <!-- Category Cards -->
+            <div class="grid grid-3 mb-xl" id="categories-grid">
+                <div class="loading" style="grid-column: 1 / -1;">
+                    <div class="spinner"></div>
+                </div>
+            </div>
+
+            <!-- Selected Category Campaigns -->
+            <div id="category-section" class="hidden">
+                <div class="flex justify-between items-center mb-lg">
+                    <h2 id="category-title">Loading...</h2>
+                    <button class="btn btn-secondary" onclick="showAllCategories()">← All Categories</button>
+                </div>
+                <div class="grid grid-3" id="category-campaigns">
+                    <div class="loading" style="grid-column: 1 / -1;">
+                        <div class="spinner"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-text">© 2024 FundAI. AI-Powered Crowdfunding Platform.</div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Toast Container -->
+    <div class="toast-container" id="toast-container"></div>
+
+    <script src="js/app.js"></script>
+    <script>
+        const categories = [
+            { name: 'Technology', icon: '💻', color: '#667eea' },
+            { name: 'Design', icon: '🎨', color: '#f093fb' },
+            { name: 'Games', icon: '🎮', color: '#10b981' },
+            { name: 'Film & Video', icon: '🎬', color: '#f59e0b' },
+            { name: 'Music', icon: '🎵', color: '#ef4444' },
+            { name: 'Food', icon: '🍕', color: '#84cc16' },
+            { name: 'Publishing', icon: '📚', color: '#6366f1' },
+            { name: 'Art', icon: '🖼️', color: '#ec4899' },
+            { name: 'Fashion', icon: '👗', color: '#14b8a6' }
+        ];
+
+        document.addEventListener('DOMContentLoaded', () => {
+            renderCategories();
+
+            // Check URL for category
+            const urlParams = new URLSearchParams(window.location.search);
+            const category = urlParams.get('category');
+            if (category) {
+                loadCategory(category);
+            }
+        });
+
+        function renderCategories() {
+            document.getElementById('categories-grid').innerHTML = categories.map(cat => `
+                <div class="card category-card" onclick="loadCategory('${cat.name}')" style="cursor: pointer; text-align: center;">
+                    <div style="font-size: 3rem; margin-bottom: var(--space-md);">${cat.icon}</div>
+                    <h3>${cat.name}</h3>
+                    <p class="text-muted">Explore ${cat.name.toLowerCase()} projects</p>
+                </div>
+            `).join('');
+        }
+
+        async function loadCategory(category) {
+            document.getElementById('categories-grid').parentElement.classList.add('hidden');
+            document.getElementById('category-section').classList.remove('hidden');
+            document.getElementById('category-title').textContent = category;
+            document.getElementById('category-campaigns').innerHTML = '<div class="loading" style="grid-column: 1 / -1;"><div class="spinner"></div></div>';
+
+            // Update URL
+            history.pushState({}, '', `?category=${encodeURIComponent(category)}`);
+
+            try {
+                const data = await api.getCampaignsByCategory(category);
+
+                if (data.campaigns.length === 0) {
+                    document.getElementById('category-campaigns').innerHTML = `
+                        <div class="empty-state" style="grid-column: 1 / -1;">
+                            <div class="empty-icon">📭</div>
+                            <h3>No campaigns in ${category} yet</h3>
+                            <p class="text-muted">Be the first to create one!</p>
+                            <a href="create-campaign.html" class="btn btn-primary mt-md">Create Campaign</a>
+                        </div>
+                    `;
+                } else {
+                    document.getElementById('category-campaigns').innerHTML = data.campaigns.map(campaign => `
+                        <a href="campaign-detail.html?id=${campaign.id}" class="campaign-card">
+                            <div class="campaign-image">
+                                <div class="campaign-placeholder-image">
+                                    <span>${categories.find(c => c.name === campaign.main_category)?.icon || '📦'}</span>
+                                </div>
+                                ${campaign.is_featured ? '<span class="campaign-badge featured">⭐ Featured</span>' : ''}
+                                ${campaign.is_ai_verified ? '<span class="campaign-badge verified">✓ AI Verified</span>' : ''}
+                            </div>
+                            <div class="campaign-content">
+                                <h3 class="campaign-title">${escapeHtml(campaign.name)}</h3>
+                                <p class="campaign-blurb">${escapeHtml(campaign.blurb)}</p>
+                                <div class="campaign-progress">
+                                    <div class="progress-bar">
+                                        <div class="progress-fill" style="width: ${campaign.funding_percentage}%"></div>
+                                    </div>
+                                    <div class="progress-stats">
+                                        <span class="progress-amount">$${formatNumber(campaign.amount_raised)}</span>
+                                        <span class="progress-percent">${campaign.funding_percentage.toFixed(0)}%</span>
+                                    </div>
+                                </div>
+                                ${campaign.ai_score !== null ? `
+                                    <div class="campaign-score ${getScoreClass(campaign.ai_score)}">
+                                        AI Score: ${(campaign.ai_score * 100).toFixed(0)}%
+                                    </div>
+                                ` : ''}
+                            </div>
+                        </a>
+                    `).join('');
+                }
+            } catch (error) {
+                document.getElementById('category-campaigns').innerHTML = `
+                    <div class="empty-state" style="grid-column: 1 / -1;">
+                        <p class="text-muted">Unable to load campaigns</p>
+                    </div>
+                `;
+            }
+        }
+
+        function showAllCategories() {
+            document.getElementById('categories-grid').parentElement.classList.remove('hidden');
+            document.getElementById('category-section').classList.add('hidden');
+            history.pushState({}, '', 'categories.html');
+        }
+
+        // Handle back button
+        window.addEventListener('popstate', () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            const category = urlParams.get('category');
+            if (category) {
+                loadCategory(category);
+            } else {
+                showAllCategories();
+            }
+        });
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Edit Campaign - FundAI">
+    <title>Edit Campaign - FundAI</title>
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+
+<body>
+    <!-- Navbar -->
+    <nav class="navbar" id="navbar">
+        <div class="container">
+            <a href="index.html" class="logo">
+                <div class="logo-icon"><img src="logo.png" alt="FundAI Logo"></div>
+                <span class="gradient-text">FundAI</span>
+            </a>
+            <div class="nav-links">
+                <a href="campaigns.html" class="nav-link">Campaigns</a>
+                <a href="dashboard.html" class="nav-link">Dashboard</a>
+            </div>
+            <div class="nav-auth" id="nav-auth"></div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main style="padding-top: 120px; min-height: 100vh;">
+        <div class="container" style="max-width: 800px;">
+            <div class="flex justify-between items-center mb-lg">
+                <div>
+                    <h1 class="animate-fade-in-up">✏️ Edit <span class="gradient-text">Campaign</span></h1>
+                    <p class="text-muted">Update your campaign details</p>
+                </div>
+                <a href="#" class="btn btn-secondary" id="back-btn">← Back</a>
+            </div>
+
+            <form class="glass-card" id="edit-form">
+                <div id="form-alert"></div>
+
+                <!-- Campaign Name -->
+                <div class="form-group">
+                    <label class="form-label" for="name">Campaign Name *</label>
+                    <input type="text" id="name" name="name" class="form-input" required maxlength="200">
+                </div>
+
+                <!-- Blurb -->
+                <div class="form-group">
+                    <label class="form-label" for="blurb">Short Pitch (Blurb) *</label>
+                    <textarea id="blurb" name="blurb" class="form-input form-textarea" required
+                        maxlength="500"></textarea>
+                </div>
+
+                <!-- Description -->
+                <div class="form-group">
+                    <label class="form-label" for="description">Full Description</label>
+                    <textarea id="description" name="description" class="form-input form-textarea" rows="6"
+                        placeholder="Detailed description of your project..."></textarea>
+                </div>
+
+                <!-- Goal & Duration (only if no investments) -->
+                <div class="grid grid-2" id="goal-section">
+                    <div class="form-group">
+                        <label class="form-label" for="goal">Funding Goal (USD)</label>
+                        <input type="number" id="goal" name="goal" class="form-input" min="100">
+                        <small class="text-muted" id="goal-note"></small>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="duration">Campaign Duration (Days)</label>
+                        <input type="number" id="duration" name="duration" class="form-input" min="1" max="60">
+                    </div>
+                </div>
+
+                <!-- Video -->
+                <div class="form-group">
+                    <label class="form-checkbox-group">
+                        <input type="checkbox" id="has-video" name="has-video" class="form-checkbox">
+                        <span>This campaign has a video</span>
+                    </label>
+                </div>
+
+                <div class="form-group" id="video-url-group" style="display: none;">
+                    <label class="form-label" for="video-url">Video URL (YouTube/Vimeo)</label>
+                    <input type="url" id="video-url" name="video-url" class="form-input"
+                        placeholder="https://youtube.com/watch?v=...">
+                </div>
+
+                <div class="flex gap-md mt-lg">
+                    <button type="submit" class="btn btn-primary btn-lg" id="save-btn">💾 Save Changes</button>
+                    <a href="#" class="btn btn-secondary btn-lg" id="view-btn">👁 View Campaign</a>
+                </div>
+            </form>
+
+            <!-- FAQs Section -->
+            <div class="card mt-xl">
+                <div class="flex justify-between items-center mb-lg">
+                    <h3>❓ Campaign FAQs</h3>
+                    <button class="btn btn-secondary" onclick="addFAQ()">➕ Add FAQ</button>
+                </div>
+                <div id="faqs-list">
+                    <div class="loading">
+                        <div class="spinner"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Toast Container -->
+    <div class="toast-container" id="toast-container"></div>
+
+    <script src="js/app.js"></script>
+    <script>
+        // Require login
+        if (!auth.isLoggedIn()) {
+            window.location.href = 'login.html';
+        }
+
+        const user = auth.getUser();
+        const urlParams = new URLSearchParams(window.location.search);
+        const campaignId = urlParams.get('id');
+
+        if (!campaignId) {
+            showToast('No campaign specified', 'error');
+            setTimeout(() => window.location.href = 'dashboard.html', 1500);
+        }
+
+        document.getElementById('back-btn').href = `campaign-detail.html?id=${campaignId}`;
+        document.getElementById('view-btn').href = `campaign-detail.html?id=${campaignId}`;
+
+        let campaign = null;
+
+        document.addEventListener('DOMContentLoaded', loadCampaign);
+
+        async function loadCampaign() {
+            try {
+                const result = await api.getCampaign(campaignId);
+                campaign = result.campaign;
+
+                // Check ownership
+                if (campaign.creator_id !== user.id && !user.is_admin) {
+                    showToast('You can only edit your own campaigns', 'error');
+                    setTimeout(() => window.location.href = 'dashboard.html', 1500);
+                    return;
+                }
+
+                // Fill form
+                document.getElementById('name').value = campaign.name;
+                document.getElementById('blurb').value = campaign.blurb;
+                document.getElementById('description').value = campaign.description || '';
+                document.getElementById('goal').value = campaign.usd_goal;
+                document.getElementById('duration').value = campaign.duration_days;
+                document.getElementById('has-video').checked = campaign.has_video;
+                document.getElementById('video-url').value = campaign.video_url || '';
+
+                // Disable goal/duration if has investments
+                if (campaign.backers_count > 0) {
+                    document.getElementById('goal').disabled = true;
+                    document.getElementById('duration').disabled = true;
+                    document.getElementById('goal-note').textContent = '⚠️ Cannot change goal after receiving investments';
+                }
+
+                // Toggle video URL field
+                document.getElementById('has-video').addEventListener('change', (e) => {
+                    document.getElementById('video-url-group').style.display = e.target.checked ? 'block' : 'none';
+                });
+                if (campaign.has_video) {
+                    document.getElementById('video-url-group').style.display = 'block';
+                }
+
+                // Load FAQs
+                loadFAQs();
+
+            } catch (error) {
+                document.getElementById('form-alert').innerHTML = `<div class="alert alert-error">Error loading campaign: ${error.message}</div>`;
+            }
+        }
+
+        async function loadFAQs() {
+            try {
+                const data = await api.getCampaignFAQs(campaignId);
+
+                if (data.faqs.length === 0) {
+                    document.getElementById('faqs-list').innerHTML = '<p class="text-muted">No FAQs yet. Add some to help backers!</p>';
+                } else {
+                    document.getElementById('faqs-list').innerHTML = data.faqs.map(faq => `
+                        <div class="dashboard-item" style="flex-direction: column; align-items: flex-start;">
+                            <strong>Q: ${escapeHtml(faq.question)}</strong>
+                            <p class="text-muted mt-sm">A: ${escapeHtml(faq.answer)}</p>
+                            <button class="btn btn-sm btn-secondary mt-sm" onclick="deleteFAQ(${faq.id})">🗑️ Delete</button>
+                        </div>
+                    `).join('');
+                }
+            } catch (error) {
+                document.getElementById('faqs-list').innerHTML = '<p class="text-muted">Unable to load FAQs</p>';
+            }
+        }
+
+        document.getElementById('edit-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const saveBtn = document.getElementById('save-btn');
+            saveBtn.disabled = true;
+            saveBtn.textContent = 'Saving...';
+
+            try {
+                await api.updateCampaign(campaignId, {
+                    name: document.getElementById('name').value,
+                    blurb: document.getElementById('blurb').value,
+                    description: document.getElementById('description').value,
+                    usd_goal: parseFloat(document.getElementById('goal').value),
+                    duration_days: parseInt(document.getElementById('duration').value),
+                    has_video: document.getElementById('has-video').checked,
+                    video_url: document.getElementById('video-url').value
+                });
+
+                showToast('Campaign updated! ✅', 'success');
+                saveBtn.textContent = '✓ Saved';
+                setTimeout(() => {
+                    saveBtn.disabled = false;
+                    saveBtn.textContent = '💾 Save Changes';
+                }, 2000);
+
+            } catch (error) {
+                document.getElementById('form-alert').innerHTML = `<div class="alert alert-error">${error.message}</div>`;
+                saveBtn.disabled = false;
+                saveBtn.textContent = '💾 Save Changes';
+            }
+        });
+
+        function addFAQ() {
+            const question = prompt('Enter the FAQ question:');
+            if (!question) return;
+
+            const answer = prompt('Enter the answer:');
+            if (!answer) return;
+
+            api.addCampaignFAQ(campaignId, { question, answer })
+                .then(() => {
+                    showToast('FAQ added!', 'success');
+                    loadFAQs();
+                })
+                .catch(err => showToast(err.message, 'error'));
+        }
+
+        async function deleteFAQ(faqId) {
+            if (!confirm('Delete this FAQ?')) return;
+
+            try {
+                await api.deleteFAQ(faqId);
+                showToast('FAQ deleted', 'success');
+                loadFAQs();
+            } catch (error) {
+                showToast(error.message, 'error');
+            }
+        }
+    </script>
+</body>
+
+</html>

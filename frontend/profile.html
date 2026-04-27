@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Manage your FundAI profile and view your campaigns.">
+    <title>Profile - FundAI</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+
+<body>
+    <!-- Navbar -->
+    <nav class="navbar" id="navbar">
+        <div class="container">
+            <a href="index.html" class="logo">
+                <div class="logo-icon"><img src="logo.png" alt="FundAI Logo"></div>
+                <span class="gradient-text">FundAI</span>
+            </a>
+
+            <div class="nav-links">
+                <a href="campaigns.html" class="nav-link">Campaigns</a>
+                <a href="create-campaign.html" class="nav-link">Create Campaign</a>
+            </div>
+
+            <div class="nav-auth" id="nav-user">
+                <a href="profile.html" class="btn btn-secondary active">Profile</a>
+                <button class="btn btn-secondary" id="nav-logout-btn" onclick="auth.logout()">Log Out</button>
+            </div>
+        </div>
+    </nav>
+
+    <main style="padding-top: 120px; min-height: 100vh;">
+        <div class="container">
+            <!-- Profile Header -->
+            <div class="profile-header glass-card">
+                <div class="avatar-container">
+                    <img src="" alt="Avatar" class="avatar" id="user-avatar">
+                    <label class="avatar-upload" title="Upload new avatar">
+                        <input type="file" accept="image/*" id="avatar-input">
+                        📷
+                    </label>
+                </div>
+                <div class="profile-info">
+                    <h2 id="user-name">Loading...</h2>
+                    <span class="profile-role" id="user-role">Creator</span>
+                    <p class="profile-about" id="user-about">Loading profile...</p>
+                    <button class="btn btn-secondary mt-md" id="edit-profile-btn">✏️ Edit Profile</button>
+                </div>
+            </div>
+
+            <!-- Edit Profile Modal -->
+            <div class="glass-card hidden mt-lg" id="edit-profile-form">
+                <h3 class="mb-lg">Edit Profile</h3>
+                <form id="profile-form">
+                    <div class="form-group">
+                        <label class="form-label" for="edit-name">Display Name</label>
+                        <input type="text" id="edit-name" class="form-input" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="edit-about">About You</label>
+                        <textarea id="edit-about" class="form-input form-textarea"
+                            placeholder="Tell others about yourself..."></textarea>
+                    </div>
+                    <div class="flex gap-md">
+                        <button type="submit" class="btn btn-primary">Save Changes</button>
+                        <button type="button" class="btn btn-secondary" id="cancel-edit-btn">Cancel</button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Tabs (for creators) -->
+            <div class="tabs mt-lg" id="creator-tabs">
+                <div class="tab active" data-tab="campaigns">My Campaigns</div>
+                <div class="tab" data-tab="stats">Statistics</div>
+            </div>
+
+            <!-- My Campaigns Section (Creators) -->
+            <div id="campaigns-tab">
+                <div class="flex justify-between items-center mb-lg">
+                    <h3>Your Campaigns</h3>
+                    <a href="create-campaign.html" class="btn btn-primary">➕ New Campaign</a>
+                </div>
+
+                <div class="grid grid-3" id="user-campaigns">
+                    <div class="loading">
+                        <div class="spinner"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Statistics Tab -->
+            <div id="stats-tab" class="hidden">
+                <div class="grid grid-4">
+                    <div class="stat-card glass-card">
+                        <div class="stat-value" id="stat-campaigns">0</div>
+                        <div class="stat-label">Total Campaigns</div>
+                    </div>
+                    <div class="stat-card glass-card">
+                        <div class="stat-value" id="stat-evaluated">0</div>
+                        <div class="stat-label">Evaluated</div>
+                    </div>
+                    <div class="stat-card glass-card">
+                        <div class="stat-value" id="stat-avg-score">0%</div>
+                        <div class="stat-label">Avg AI Score</div>
+                    </div>
+                    <div class="stat-card glass-card">
+                        <div class="stat-value" id="stat-total-goal">$0</div>
+                        <div class="stat-label">Total Goal Value</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-text">
+                    © 2024 FundAI. AI-Powered Crowdfunding Platform.
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Toast Container -->
+    <div class="toast-container" id="toast-container"></div>
+
+    <script src="js/app.js"></script>
+    <script>
+        // Require login
+        if (!auth.isLoggedIn()) {
+            window.location.href = 'login.html';
+        }
+
+        const user = auth.getUser();
+        let userCampaigns = [];
+
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', async () => {
+            loadProfile();
+            loadUserCampaigns();
+            setupEventListeners();
+
+            // Hide creator tabs for investors
+            if (user.role !== 'creator') {
+                document.getElementById('creator-tabs').classList.add('hidden');
+                document.getElementById('campaigns-tab').innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-icon">📊</div>
+                        <h3 class="empty-title">Investor Dashboard</h3>
+                        <p class="empty-description">Browse campaigns and find promising investments.</p>
+                        <a href="campaigns.html" class="btn btn-primary">Browse Campaigns</a>
+                    </div>
+                `;
+            }
+        });
+
+        function loadProfile() {
+            document.getElementById('user-name').textContent = user.name;
+            document.getElementById('user-role').textContent = user.role.charAt(0).toUpperCase() + user.role.slice(1);
+            document.getElementById('user-about').textContent = user.about || 'No bio added yet.';
+
+            // Avatar
+            const avatarUrl = user.avatar && user.avatar !== 'default_avatar.png'
+                ? `/uploads/avatars/${user.avatar}`
+                : `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}&background=667eea&color=fff&size=200`;
+            document.getElementById('user-avatar').src = avatarUrl;
+
+            // Populate edit form
+            document.getElementById('edit-name').value = user.name;
+            document.getElementById('edit-about').value = user.about || '';
+        }
+
+        async function loadUserCampaigns() {
+            if (user.role !== 'creator') return;
+
+            const container = document.getElementById('user-campaigns');
+
+            try {
+                userCampaigns = await api.getUserCampaigns(user.id);
+
+                if (userCampaigns.length === 0) {
+                    container.innerHTML = `
+                        <div class="empty-state" style="grid-column: 1 / -1;">
+                            <div class="empty-icon">🚀</div>
+                            <h3 class="empty-title">No Campaigns Yet</h3>
+                            <p class="empty-description">Create your first campaign and get AI-powered insights!</p>
+                            <a href="create-campaign.html" class="btn btn-primary">Create Campaign</a>
+                        </div>
+                    `;
+                    return;
+                }
+
+                container.innerHTML = userCampaigns.map(campaign => `
+                    <a href="campaign-detail.html?id=${campaign.id}" class="card campaign-card">
+                        <div class="campaign-image" style="background: linear-gradient(135deg, var(--primary-color), var(--accent-color)); display: flex; align-items: center; justify-content: center;">
+                            <span style="font-size: 3rem;">${getCategoryEmoji(campaign.main_category)}</span>
+                        </div>
+                        <div class="campaign-content">
+                            <span class="campaign-category">${campaign.main_category}</span>
+                            <h3 class="campaign-title">${escapeHtml(campaign.name)}</h3>
+                            <p class="campaign-blurb">${escapeHtml(campaign.blurb)}</p>
+                            <div class="campaign-meta">
+                                <span class="campaign-goal">$${formatNumber(campaign.usd_goal)}</span>
+                                ${campaign.ai_score !== null ? `
+                                    <span class="campaign-score ${getScoreClass(campaign.ai_score)}">
+                                        🎯 ${(campaign.ai_score * 100).toFixed(0)}%
+                                    </span>
+                                ` : `
+                                    <span class="campaign-score text-muted">⏳ Not evaluated</span>
+                                `}
+                            </div>
+                        </div>
+                    </a>
+                `).join('');
+
+                // Update stats
+                updateStats();
+
+            } catch (error) {
+                container.innerHTML = `<p class="text-muted">Unable to load campaigns.</p>`;
+            }
+        }
+
+        function updateStats() {
+            const evaluated = userCampaigns.filter(c => c.ai_score !== null);
+            const avgScore = evaluated.length > 0
+                ? evaluated.reduce((sum, c) => sum + c.ai_score, 0) / evaluated.length
+                : 0;
+            const totalGoal = userCampaigns.reduce((sum, c) => sum + c.usd_goal, 0);
+
+            document.getElementById('stat-campaigns').textContent = userCampaigns.length;
+            document.getElementById('stat-evaluated').textContent = evaluated.length;
+            document.getElementById('stat-avg-score').textContent = `${(avgScore * 100).toFixed(0)}%`;
+            document.getElementById('stat-total-goal').textContent = `$${formatNumber(totalGoal)}`;
+        }
+
+        function setupEventListeners() {
+            // Tab switching
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.addEventListener('click', () => {
+                    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                    tab.classList.add('active');
+
+                    const tabName = tab.dataset.tab;
+                    document.getElementById('campaigns-tab').classList.toggle('hidden', tabName !== 'campaigns');
+                    document.getElementById('stats-tab').classList.toggle('hidden', tabName !== 'stats');
+                });
+            });
+
+            // Edit profile toggle
+            document.getElementById('edit-profile-btn').addEventListener('click', () => {
+                document.getElementById('edit-profile-form').classList.remove('hidden');
+            });
+
+            document.getElementById('cancel-edit-btn').addEventListener('click', () => {
+                document.getElementById('edit-profile-form').classList.add('hidden');
+            });
+
+            // Save profile
+            document.getElementById('profile-form').addEventListener('submit', async (e) => {
+                e.preventDefault();
+
+                const name = document.getElementById('edit-name').value.trim();
+                const about = document.getElementById('edit-about').value.trim();
+
+                try {
+                    const updated = await api.updateProfile(user.id, { name, about });
+                    auth.updateUser(updated.user);
+                    loadProfile();
+                    document.getElementById('edit-profile-form').classList.add('hidden');
+                    showToast('Profile updated! ✨', 'success');
+                } catch (error) {
+                    showToast(error.message, 'error');
+                }
+            });
+
+            // Avatar upload
+            document.getElementById('avatar-input').addEventListener('change', async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                try {
+                    const result = await api.uploadAvatar(user.id, file);
+                    auth.updateUser({ ...user, avatar: result.avatar });
+                    loadProfile();
+                    showToast('Avatar updated! 📸', 'success');
+                } catch (error) {
+                    showToast(error.message, 'error');
+                }
+            });
+        }
+    </script>
+</body>
+
+</html>

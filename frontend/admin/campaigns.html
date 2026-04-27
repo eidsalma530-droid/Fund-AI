@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="FundAI Admin - Campaign Management">
+    <title>Campaigns - Admin Panel - FundAI</title>
+    <link rel="icon" type="image/png" href="../favicon.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../css/styles.css">
+</head>
+
+<body>
+    <!-- Admin Header -->
+    <header class="admin-header">
+        <a href="../index.html" class="logo">
+            <div class="logo-icon"><img src="../logo.png" alt="FundAI Logo"></div>
+            <span class="gradient-text">FundAI</span>
+            <span class="admin-badge warning">ADMIN</span>
+        </a>
+        <nav class="admin-nav">
+            <a href="index.html" class="admin-nav-link">Dashboard</a>
+            <a href="users.html" class="admin-nav-link">Users</a>
+            <a href="campaigns.html" class="admin-nav-link active">Campaigns</a>
+        </nav>
+        <div>
+            <a href="../index.html" class="btn btn-secondary">← Back to Site</a>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="section" style="padding-top: 40px;">
+        <div class="container">
+            <div class="flex justify-between items-center mb-lg">
+                <h1>Campaign <span class="gradient-text">Management</span></h1>
+                <div class="flex gap-md">
+                    <select class="form-input form-select" id="status-filter" style="width: 150px;">
+                        <option value="">All Status</option>
+                        <option value="pending">Pending</option>
+                        <option value="evaluated">Evaluated</option>
+                        <option value="active">Active</option>
+                        <option value="funded">Funded</option>
+                    </select>
+                    <input type="text" class="form-input" id="search-input" placeholder="Search campaigns..."
+                        style="width: 250px;">
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="table-responsive">
+                    <table class="admin-table">
+                        <thead>
+                            <tr>
+                                <th>Campaign</th>
+                                <th>Creator</th>
+                                <th>Category</th>
+                                <th>Goal</th>
+                                <th>Progress</th>
+                                <th>AI Score</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="campaigns-tbody">
+                            <tr>
+                                <td colspan="8" class="text-center">
+                                    <div class="loading">
+                                        <div class="spinner"></div>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Toast Container -->
+    <div class="toast-container" id="toast-container"></div>
+
+    <script src="../js/app.js"></script>
+    <script>
+        let allCampaigns = [];
+
+        document.addEventListener('DOMContentLoaded', loadCampaigns);
+
+        async function loadCampaigns() {
+            try {
+                const data = await api.getAllCampaigns();
+                allCampaigns = data.campaigns;
+                renderCampaigns(allCampaigns);
+            } catch (error) {
+                document.getElementById('campaigns-tbody').innerHTML = `
+                    <tr><td colspan="8" class="text-center text-muted">Unable to load campaigns</td></tr>
+                `;
+            }
+        }
+
+        function renderCampaigns(campaigns) {
+            if (campaigns.length === 0) {
+                document.getElementById('campaigns-tbody').innerHTML = `
+                    <tr><td colspan="8" class="text-center text-muted">No campaigns found</td></tr>
+                `;
+                return;
+            }
+
+            document.getElementById('campaigns-tbody').innerHTML = campaigns.map(c => `
+                <tr>
+                    <td>
+                        <a href="../campaign-detail.html?id=${c.id}">
+                            <strong>${escapeHtml(c.name)}</strong>
+                        </a>
+                        <div class="text-muted" style="font-size: 0.8rem;">
+                            ${c.is_featured ? '⭐ Featured ' : ''}
+                            ${c.is_ai_verified ? '✓ Verified' : ''}
+                        </div>
+                    </td>
+                    <td>${escapeHtml(c.creator_name)}</td>
+                    <td>${c.main_category}</td>
+                    <td>$${formatNumber(c.usd_goal)}</td>
+                    <td>
+                        <div class="progress-bar-mini" style="width: 100px;">
+                            <div class="progress-fill" style="width: ${c.funding_percentage}%"></div>
+                        </div>
+                        <span style="font-size: 0.8rem;">${c.funding_percentage.toFixed(0)}%</span>
+                    </td>
+                    <td>
+                        ${c.ai_score !== null ? `
+                            <span class="campaign-score ${getScoreClass(c.ai_score)}">
+                                ${(c.ai_score * 100).toFixed(0)}%
+                            </span>
+                        ` : '-'}
+                    </td>
+                    <td>
+                        <span class="admin-badge ${getStatusBadgeClass(c.status)}">${c.status}</span>
+                    </td>
+                    <td>
+                        <div class="flex gap-sm">
+                            <button class="btn btn-sm btn-secondary" onclick="toggleFeatured(${c.id})" title="${c.is_featured ? 'Unfeature' : 'Feature'}">
+                                ${c.is_featured ? '★' : '☆'}
+                            </button>
+                            ${!c.is_ai_verified ? `
+                                <button class="btn btn-sm btn-primary" onclick="verifyCampaign(${c.id})" title="Verify">✓</button>
+                            ` : ''}
+                            <a href="../campaign-detail.html?id=${c.id}" class="btn btn-sm btn-secondary" title="View">👁</a>
+                        </div>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function getStatusBadgeClass(status) {
+            const classes = {
+                'pending': 'warning',
+                'evaluated': 'success',
+                'active': 'success',
+                'funded': 'success',
+                'failed': 'danger'
+            };
+            return classes[status] || 'warning';
+        }
+
+        async function toggleFeatured(campaignId) {
+            try {
+                await api.toggleFeatured(campaignId);
+                showToast('Campaign featured status updated', 'success');
+                loadCampaigns();
+            } catch (error) {
+                showToast(error.message, 'error');
+            }
+        }
+
+        async function verifyCampaign(campaignId) {
+            try {
+                await api.verifyCampaign(campaignId);
+                showToast('Campaign verified', 'success');
+                loadCampaigns();
+            } catch (error) {
+                showToast(error.message, 'error');
+            }
+        }
+
+        // Filter functionality
+        function filterCampaigns() {
+            const status = document.getElementById('status-filter').value;
+            const query = document.getElementById('search-input').value.toLowerCase();
+
+            let filtered = allCampaigns;
+
+            if (status) {
+                filtered = filtered.filter(c => c.status === status);
+            }
+
+            if (query) {
+                filtered = filtered.filter(c =>
+                    c.name.toLowerCase().includes(query) ||
+                    c.creator_name.toLowerCase().includes(query)
+                );
+            }
+
+            renderCampaigns(filtered);
+        }
+
+        document.getElementById('status-filter').addEventListener('change', filterCampaigns);
+        document.getElementById('search-input').addEventListener('input', filterCampaigns);
+    </script>
+</body>
+
+</html>

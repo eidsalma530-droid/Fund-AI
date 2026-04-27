@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="FundAI Dashboard - View your campaigns, investments, and activity">
+    <title>Dashboard - FundAI</title>
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+
+<body>
+    <!-- Navbar -->
+    <nav class="navbar" id="navbar">
+        <div class="container">
+            <a href="index.html" class="logo">
+                <div class="logo-icon"><img src="logo.png" alt="FundAI Logo"></div>
+                <span class="gradient-text">FundAI</span>
+            </a>
+
+            <div class="nav-links">
+                <a href="campaigns.html" class="nav-link">Campaigns</a>
+                <a href="dashboard.html" class="nav-link active">Dashboard</a>
+                <a href="bookmarks.html" class="nav-link">Saved</a>
+            </div>
+
+            <div class="nav-auth" id="nav-auth">
+                <a href="login.html" class="btn btn-secondary">Log In</a>
+                <a href="signup.html" class="btn btn-primary">Get Started</a>
+            </div>
+
+            <div class="nav-auth hidden" id="nav-user">
+                <div class="notification-bell" id="notification-bell">
+                    <button class="btn btn-icon btn-secondary">🔔</button>
+                    <span class="notification-badge hidden" id="notification-badge">0</span>
+                </div>
+                <a href="profile.html" class="btn btn-secondary" id="nav-profile-btn">
+                    <span id="nav-user-name">Profile</span>
+                </a>
+                <button class="btn btn-secondary" id="nav-logout-btn">Log Out</button>
+            </div>
+
+            <button class="mobile-menu-btn" aria-label="Toggle menu">
+                <span></span><span></span><span></span>
+            </button>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="section" style="padding-top: 120px;">
+        <div class="container">
+            <!-- Welcome Header -->
+            <div class="dashboard-header">
+                <div>
+                    <h1>Welcome back, <span class="gradient-text" id="user-name">User</span>!</h1>
+                    <p class="text-secondary">Here's an overview of your activity</p>
+                </div>
+                <div class="dashboard-actions" id="dashboard-actions"></div>
+            </div>
+
+            <!-- Stats Cards -->
+            <div class="stats-grid" id="stats-grid">
+                <div class="loading">
+                    <div class="spinner"></div>
+                </div>
+            </div>
+
+            <!-- Main Grid -->
+            <div class="dashboard-grid">
+                <!-- Left Column -->
+                <div class="dashboard-main">
+                    <div class="card">
+                        <div class="card-header flex justify-between items-center">
+                            <h3 class="card-title" id="main-section-title">My Campaigns</h3>
+                            <a href="#" class="btn btn-sm btn-secondary" id="view-all-btn">View All →</a>
+                        </div>
+                        <div id="main-content">
+                            <div class="loading">
+                                <div class="spinner"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Recent Activity -->
+                    <div class="card mt-lg">
+                        <h3 class="card-title">Recent Activity</h3>
+                        <div id="activity-content">
+                            <div class="loading">
+                                <div class="spinner"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Sidebar -->
+                <div class="dashboard-sidebar">
+                    <!-- Notifications -->
+                    <div class="card">
+                        <div class="card-header flex justify-between items-center">
+                            <h4 class="card-title">🔔 Notifications</h4>
+                            <button class="btn btn-sm btn-secondary" id="mark-all-read">Mark all read</button>
+                        </div>
+                        <div id="notifications-content">
+                            <div class="loading">
+                                <div class="spinner"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Quick Actions -->
+                    <div class="card mt-lg">
+                        <h4 class="card-title">Quick Actions</h4>
+                        <div class="quick-actions">
+                            <a href="create-campaign.html" class="btn btn-primary btn-block" id="create-campaign-btn"
+                                style="display: none;">
+                                ➕ Create Campaign
+                            </a>
+                            <a href="campaigns.html" class="btn btn-secondary btn-block">
+                                🔍 Browse Campaigns
+                            </a>
+                            <a href="bookmarks.html" class="btn btn-secondary btn-block">
+                                ❤️ View Saved
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-text">© 2024 FundAI. AI-Powered Crowdfunding Platform.</div>
+                <div class="footer-links">
+                    <a href="privacy.html" class="footer-link">Privacy</a>
+                    <a href="terms.html" class="footer-link">Terms</a>
+                    <a href="contact.html" class="footer-link">Contact</a>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Toast Container -->
+    <div class="toast-container" id="toast-container"></div>
+
+    <script src="js/app.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            updateNavbar();
+
+            const user = auth.getUser();
+            if (!user) {
+                window.location.href = 'login.html';
+                return;
+            }
+
+            document.getElementById('user-name').textContent = user.name;
+
+            // Show create campaign button for creators
+            if (user.role === 'creator') {
+                document.getElementById('create-campaign-btn').style.display = 'block';
+                document.getElementById('main-section-title').textContent = 'My Campaigns';
+                document.getElementById('view-all-btn').href = 'profile.html';
+            } else {
+                document.getElementById('main-section-title').textContent = 'My Investments';
+                document.getElementById('view-all-btn').href = 'profile.html';
+            }
+
+            // Dashboard actions
+            const actionsHtml = user.role === 'creator'
+                ? '<a href="create-campaign.html" class="btn btn-primary">➕ New Campaign</a>'
+                : '<a href="campaigns.html" class="btn btn-primary">🔍 Find Campaigns</a>';
+            document.getElementById('dashboard-actions').innerHTML = actionsHtml;
+
+            try {
+                const data = await api.getDashboard(user.id);
+
+                // Render stats
+                const statsHtml = user.role === 'creator' ? `
+                    <div class="stat-card glass-card">
+                        <div class="stat-value">${data.stats.campaigns_count}</div>
+                        <div class="stat-label">Campaigns</div>
+                    </div>
+                    <div class="stat-card glass-card">
+                        <div class="stat-value">$${formatNumber(data.stats.total_raised)}</div>
+                        <div class="stat-label">Total Raised</div>
+                    </div>
+                    <div class="stat-card glass-card">
+                        <div class="stat-value">${data.stats.total_backers}</div>
+                        <div class="stat-label">Total Backers</div>
+                    </div>
+                    <div class="stat-card glass-card">
+                        <div class="stat-value">${(data.stats.avg_score * 100).toFixed(0)}%</div>
+                        <div class="stat-label">Avg AI Score</div>
+                    </div>
+                ` : `
+                    <div class="stat-card glass-card">
+                        <div class="stat-value">${data.stats.investments_count}</div>
+                        <div class="stat-label">Investments</div>
+                    </div>
+                    <div class="stat-card glass-card">
+                        <div class="stat-value">$${formatNumber(data.stats.total_invested)}</div>
+                        <div class="stat-label">Total Invested</div>
+                    </div>
+                    <div class="stat-card glass-card">
+                        <div class="stat-value">${data.stats.campaigns_backed}</div>
+                        <div class="stat-label">Campaigns Backed</div>
+                    </div>
+                    <div class="stat-card glass-card">
+                        <div class="stat-value">${data.bookmarks?.length || 0}</div>
+                        <div class="stat-label">Saved Campaigns</div>
+                    </div>
+                `;
+                document.getElementById('stats-grid').innerHTML = statsHtml;
+
+                // Render main content
+                if (user.role === 'creator' && data.campaigns) {
+                    if (data.campaigns.length === 0) {
+                        document.getElementById('main-content').innerHTML = `
+                            <div class="empty-state">
+                                <div class="empty-icon">📭</div>
+                                <h4>No campaigns yet</h4>
+                                <p class="text-muted">Create your first campaign to get started!</p>
+                                <a href="create-campaign.html" class="btn btn-primary mt-md">Create Campaign</a>
+                            </div>
+                        `;
+                    } else {
+                        document.getElementById('main-content').innerHTML = data.campaigns.map(c => `
+                            <a href="campaign-detail.html?id=${c.id}" class="dashboard-item">
+                                <div class="dashboard-item-icon">${getCategoryEmoji(c.main_category)}</div>
+                                <div class="dashboard-item-content">
+                                    <div class="dashboard-item-title">${escapeHtml(c.name)}</div>
+                                    <div class="dashboard-item-meta">
+                                        <span>$${formatNumber(c.amount_raised)} / $${formatNumber(c.usd_goal)}</span>
+                                        <span class="campaign-score ${getScoreClass(c.ai_score)}">
+                                            ${c.ai_score ? `${(c.ai_score * 100).toFixed(0)}% AI Score` : 'Pending'}
+                                        </span>
+                                    </div>
+                                </div>
+                                <div class="progress-bar-mini">
+                                    <div class="progress-fill" style="width: ${c.funding_percentage}%"></div>
+                                </div>
+                            </a>
+                        `).join('');
+                    }
+                } else if (data.investments) {
+                    if (data.investments.length === 0) {
+                        document.getElementById('main-content').innerHTML = `
+                            <div class="empty-state">
+                                <div class="empty-icon">💰</div>
+                                <h4>No investments yet</h4>
+                                <p class="text-muted">Find campaigns to support!</p>
+                                <a href="campaigns.html" class="btn btn-primary mt-md">Browse Campaigns</a>
+                            </div>
+                        `;
+                    } else {
+                        document.getElementById('main-content').innerHTML = data.investments.map(inv => `
+                            <a href="campaign-detail.html?id=${inv.campaign_id}" class="dashboard-item">
+                                <div class="dashboard-item-icon">💰</div>
+                                <div class="dashboard-item-content">
+                                    <div class="dashboard-item-title">${escapeHtml(inv.campaign_name)}</div>
+                                    <div class="dashboard-item-meta">
+                                        <span>$${formatNumber(inv.amount)} invested</span>
+                                        <span class="text-muted">${formatDate(inv.created_at)}</span>
+                                    </div>
+                                </div>
+                            </a>
+                        `).join('');
+                    }
+                }
+
+                // Render recent activity
+                const recentItems = data.recent_investments || data.investments || [];
+                if (recentItems.length === 0) {
+                    document.getElementById('activity-content').innerHTML = `
+                        <p class="text-muted text-center">No recent activity</p>
+                    `;
+                } else {
+                    document.getElementById('activity-content').innerHTML = recentItems.slice(0, 5).map(item => `
+                        <div class="activity-item">
+                            <div class="activity-icon">💵</div>
+                            <div class="activity-content">
+                                <span class="activity-text">${user.role === 'creator'
+                            ? `${item.investor_name || 'Someone'} invested $${formatNumber(item.amount)}`
+                            : `You invested $${formatNumber(item.amount)} in ${item.campaign_name}`
+                        }</span>
+                                <span class="activity-time">${formatDate(item.created_at)}</span>
+                            </div>
+                        </div>
+                    `).join('');
+                }
+
+            } catch (error) {
+                console.error('Dashboard error:', error);
+                document.getElementById('stats-grid').innerHTML = `
+                    <div class="empty-state" style="grid-column: 1 / -1;">
+                        <p class="text-muted">Unable to load dashboard. Please try again.</p>
+                    </div>
+                `;
+            }
+
+            // Load notifications
+            loadNotifications(user.id);
+        });
+
+        async function loadNotifications(userId) {
+            try {
+                const data = await api.getNotifications(userId);
+                const badge = document.getElementById('notification-badge');
+
+                if (data.unread_count > 0) {
+                    badge.textContent = data.unread_count > 9 ? '9+' : data.unread_count;
+                    badge.classList.remove('hidden');
+                }
+
+                if (data.notifications.length === 0) {
+                    document.getElementById('notifications-content').innerHTML = `
+                        <p class="text-muted text-center">No notifications</p>
+                    `;
+                } else {
+                    document.getElementById('notifications-content').innerHTML = data.notifications.slice(0, 5).map(n => `
+                        <a href="${n.link}" class="notification-item ${n.is_read ? '' : 'unread'}">
+                            <div class="notification-icon">${getNotificationIcon(n.type)}</div>
+                            <div class="notification-content">
+                                <div class="notification-title">${escapeHtml(n.title)}</div>
+                                <div class="notification-time">${formatDate(n.created_at)}</div>
+                            </div>
+                        </a>
+                    `).join('');
+                }
+            } catch (error) {
+                document.getElementById('notifications-content').innerHTML = `
+                    <p class="text-muted text-center">Unable to load notifications</p>
+                `;
+            }
+        }
+
+        function getNotificationIcon(type) {
+            const icons = {
+                'investment': '💰',
+                'update': '📢',
+                'comment': '💬',
+                'milestone': '🎯',
+                'review': '⭐'
+            };
+            return icons[type] || '🔔';
+        }
+
+        // Mark all notifications as read
+        document.getElementById('mark-all-read').addEventListener('click', async () => {
+            const user = auth.getUser();
+            if (user) {
+                await api.markAllNotificationsRead(user.id);
+                document.getElementById('notification-badge').classList.add('hidden');
+                document.querySelectorAll('.notification-item.unread').forEach(el => {
+                    el.classList.remove('unread');
+                });
+                showToast('All notifications marked as read', 'success');
+            }
+        });
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description"
+        content="View campaign details with AI-powered success predictions and strategic advice from Gemini.">
+    <title>Campaign Details - FundAI</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+
+<body>
+    <!-- SVG Gradients for Score Circle -->
+    <svg width="0" height="0">
+        <defs>
+            <linearGradient id="gradient-success" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#10b981" />
+                <stop offset="100%" stop-color="#34d399" />
+            </linearGradient>
+            <linearGradient id="gradient-warning" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#f59e0b" />
+                <stop offset="100%" stop-color="#fbbf24" />
+            </linearGradient>
+            <linearGradient id="gradient-error" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#ef4444" />
+                <stop offset="100%" stop-color="#f87171" />
+            </linearGradient>
+        </defs>
+    </svg>
+
+    <!-- Navbar -->
+    <nav class="navbar" id="navbar">
+        <div class="container">
+            <a href="index.html" class="logo">
+                <div class="logo-icon"><img src="logo.png" alt="FundAI Logo"></div>
+                <span class="gradient-text">FundAI</span>
+            </a>
+
+            <div class="nav-links">
+                <a href="campaigns.html" class="nav-link">← Back to Campaigns</a>
+            </div>
+
+            <div class="nav-auth" id="nav-auth">
+                <a href="login.html" class="btn btn-secondary">Log In</a>
+                <a href="signup.html" class="btn btn-primary">Get Started</a>
+            </div>
+
+            <div class="nav-auth hidden" id="nav-user">
+                <a href="profile.html" class="btn btn-secondary" id="nav-profile-btn">Profile</a>
+                <button class="btn btn-secondary" id="nav-logout-btn" onclick="auth.logout()">Log Out</button>
+            </div>
+        </div>
+    </nav>
+
+    <main style="padding-top: 120px; min-height: 100vh;" id="main-content">
+        <div class="container">
+            <div class="loading text-center" id="loading-state">
+                <div class="spinner"></div>
+                <p class="loading-text mt-md">Loading campaign details...</p>
+            </div>
+
+            <!-- Campaign Content (hidden until loaded) -->
+            <div class="hidden" id="campaign-content">
+                <div class="grid" style="grid-template-columns: 1fr 380px; gap: var(--space-xl);">
+                    <!-- Left Column: Campaign Details -->
+                    <div>
+                        <div class="glass-card mb-lg">
+                            <span class="campaign-category" id="campaign-category">Technology</span>
+                            <h1 style="font-size: 2.25rem; margin: var(--space-md) 0;" id="campaign-name">Loading...
+                            </h1>
+                            <p class="text-secondary" style="font-size: 1.1rem; line-height: 1.8;" id="campaign-blurb">
+                                Loading campaign description...
+                            </p>
+
+                            <div class="grid grid-4 mt-lg" style="text-align: center;">
+                                <div>
+                                    <div style="font-size: 1.5rem; font-weight: 700; color: var(--primary-light);"
+                                        id="campaign-goal">$0</div>
+                                    <div class="text-muted">Funding Goal</div>
+                                </div>
+                                <div>
+                                    <div style="font-size: 1.5rem; font-weight: 700;" id="campaign-duration">0</div>
+                                    <div class="text-muted">Days</div>
+                                </div>
+                                <div>
+                                    <div style="font-size: 1.5rem; font-weight: 700;" id="campaign-country">US</div>
+                                    <div class="text-muted">Country</div>
+                                </div>
+                                <div>
+                                    <div style="font-size: 1.5rem;" id="campaign-video">📹</div>
+                                    <div class="text-muted" id="campaign-video-text">Has Video</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Gemini Advice Section -->
+                        <div class="gemini-advice" id="gemini-section">
+                            <div class="gemini-header">
+                                <div class="gemini-icon">✨</div>
+                                <div>
+                                    <h3 class="gemini-title">AI Strategic Advice</h3>
+                                    <p class="text-muted">Powered by Gemini AI</p>
+                                </div>
+                            </div>
+                            <div class="gemini-content" id="gemini-advice">
+                                <p class="text-muted">AI advice will appear here after evaluation...</p>
+                            </div>
+
+                            <!-- Share Section -->
+                            <div class="share-section">
+                                <span class="share-label">📤 Share this campaign:</span>
+                                <div class="share-buttons">
+                                    <button class="share-btn twitter" onclick="shareOnTwitter(campaign.name)"
+                                        title="Share on Twitter">
+                                        𝕏
+                                    </button>
+                                    <button class="share-btn facebook" onclick="shareOnFacebook()"
+                                        title="Share on Facebook">
+                                        f
+                                    </button>
+                                    <button class="share-btn linkedin" onclick="shareOnLinkedIn(campaign.name)"
+                                        title="Share on LinkedIn">
+                                        in
+                                    </button>
+                                    <button class="share-btn whatsapp" onclick="shareOnWhatsApp(campaign.name)"
+                                        title="Share on WhatsApp">
+                                        💬
+                                    </button>
+                                    <button class="share-btn copy" onclick="copyToClipboard()" title="Copy link">
+                                        🔗
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Risk Disclosure -->
+                        <div class="risk-disclosure">
+                            <div class="risk-disclosure-header">
+                                ⚠️ Investment Risk Disclosure
+                            </div>
+                            <div class="risk-disclosure-text">
+                                Investing in crowdfunding campaigns involves risk, including loss of capital.
+                                Campaign success is not guaranteed. Past AI predictions are not indicative of future
+                                results.
+                                Please invest responsibly and only amounts you can afford to lose.
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right Column: AI Score -->
+                    <div>
+                        <div class="ai-score-card glass-card" id="score-section">
+                            <!-- Live Viewers -->
+                            <div class="live-viewers" id="live-viewers-indicator">
+                                <span class="live-pulse"></span>
+                                <span>Loading...</span>
+                            </div>
+
+                            <h3 class="mb-md" style="margin-top: var(--space-md);">AI Success Prediction</h3>
+
+                            <!-- Score Circle -->
+                            <div class="score-circle">
+                                <svg width="200" height="200" viewBox="0 0 200 200">
+                                    <circle class="score-circle-bg" cx="100" cy="100" r="90" />
+                                    <circle class="score-circle-progress" id="score-progress" cx="100" cy="100"
+                                        r="90" />
+                                </svg>
+                                <div class="score-value gradient-text" id="score-value">--%</div>
+                            </div>
+
+                            <p class="text-secondary mb-lg" id="score-message">
+                                Loading AI prediction...
+                            </p>
+
+                            <!-- Score Breakdown -->
+                            <div class="score-breakdown">
+                                <div class="score-item">
+                                    <div class="score-item-label">🧠 Deep Learning</div>
+                                    <div class="score-item-value gradient-text" id="dl-score">--%</div>
+                                </div>
+                                <div class="score-item">
+                                    <div class="score-item-label">📊 Data Model</div>
+                                    <div class="score-item-value gradient-text" id="xgb-score">--%</div>
+                                </div>
+                            </div>
+
+                            <!-- Evaluate Button (for creators) -->
+                            <button class="btn btn-accent btn-lg w-full mt-lg hidden" id="evaluate-btn">
+                                🤖 Evaluate with AI
+                            </button>
+                        </div>
+
+                        <!-- Creator Info -->
+                        <div class="glass-card mt-lg" id="creator-card">
+                            <h4 class="mb-md">Created by</h4>
+                            <div class="flex items-center gap-md">
+                                <img src="" alt="Creator" class="avatar" id="creator-avatar"
+                                    style="width: 50px; height: 50px;">
+                                <div>
+                                    <div style="font-weight: 600;" id="creator-name">Creator</div>
+                                    <div class="text-muted" style="font-size: 0.85rem;" id="created-date">Date</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Funding Progress (for investors) -->
+                        <div class="glass-card mt-lg" id="funding-section">
+                            <h4 class="mb-md">💰 Funding Progress</h4>
+                            <div class="funding-stats mb-md">
+                                <div class="funding-raised">
+                                    <span class="gradient-text" style="font-size: 1.75rem; font-weight: 700;"
+                                        id="amount-raised">$0</span>
+                                    <span class="text-muted"> raised of </span>
+                                    <span id="goal-target">$0</span>
+                                </div>
+                                <div class="text-muted mt-sm">
+                                    <span id="backers-count">0</span> backers
+                                </div>
+                            </div>
+                            <div class="progress-bar-container"
+                                style="background: rgba(255,255,255,0.1); border-radius: 10px; height: 12px; overflow: hidden;">
+                                <div class="progress-bar-fill" id="funding-progress"
+                                    style="height: 100%; background: var(--primary-gradient); border-radius: 10px; transition: width 0.5s ease; width: 0%;">
+                                </div>
+                            </div>
+                            <div class="text-right text-muted mt-sm" id="funding-percentage">0% funded</div>
+
+                            <!-- Invest Button (for investors) -->
+                            <div class="mt-lg hidden" id="invest-section">
+                                <div class="form-group">
+                                    <label class="form-label">Investment Amount ($)</label>
+                                    <input type="number" class="form-input" id="invest-amount"
+                                        placeholder="Enter amount" min="1" step="1">
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Message (optional)</label>
+                                    <textarea class="form-input" id="invest-message"
+                                        placeholder="Leave a message for the creator..." rows="2"></textarea>
+                                </div>
+                                <button class="btn btn-accent btn-lg w-full" id="invest-btn"
+                                    onclick="investInCampaign()">
+                                    💵 Invest Now
+                                </button>
+                            </div>
+
+                            <!-- Login prompt for non-investors -->
+                            <div class="mt-lg" id="invest-login-prompt">
+                                <a href="signup.html" class="btn btn-primary w-full">Sign up to Invest</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Error State -->
+            <div class="empty-state hidden" id="error-state">
+                <div class="empty-icon">😕</div>
+                <h3 class="empty-title">Campaign Not Found</h3>
+                <p class="empty-description">This campaign may have been removed or doesn't exist.</p>
+                <a href="campaigns.html" class="btn btn-primary">Browse Campaigns</a>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-text">
+                    © 2024 FundAI. AI-Powered Crowdfunding Platform.
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Toast Container -->
+    <div class="toast-container" id="toast-container"></div>
+
+    <script src="js/app.js"></script>
+    <script>
+        let campaign = null;
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            updateNavbar();
+
+            const urlParams = new URLSearchParams(window.location.search);
+            const campaignId = urlParams.get('id');
+
+            if (!campaignId) {
+                showError();
+                return;
+            }
+
+            await loadCampaign(campaignId);
+        });
+
+        async function loadCampaign(id) {
+            try {
+                const result = await api.getCampaign(id);
+                campaign = result.campaign;
+                renderCampaign();
+
+            } catch (error) {
+                showError();
+            }
+        }
+
+        function renderCampaign() {
+            document.getElementById('loading-state').classList.add('hidden');
+            document.getElementById('campaign-content').classList.remove('hidden');
+
+            // Update page title
+            document.title = `${campaign.name} - FundAI`;
+
+            // Initialize live viewers
+            initLiveViewers('live-viewers-indicator');
+
+            // Basic info
+            document.getElementById('campaign-category').textContent = campaign.main_category;
+            document.getElementById('campaign-name').textContent = campaign.name;
+            document.getElementById('campaign-blurb').textContent = campaign.blurb;
+            document.getElementById('campaign-goal').textContent = '$' + formatNumber(campaign.usd_goal);
+            document.getElementById('campaign-duration').textContent = campaign.duration_days;
+            document.getElementById('campaign-country').textContent = campaign.country;
+
+            // Video indicator
+            if (campaign.has_video) {
+                document.getElementById('campaign-video').textContent = '📹';
+                document.getElementById('campaign-video-text').textContent = 'Has Video';
+            } else {
+                document.getElementById('campaign-video').textContent = '📷';
+                document.getElementById('campaign-video-text').textContent = 'No Video';
+            }
+
+            // Creator info
+            document.getElementById('creator-name').textContent = campaign.creator_name || 'Unknown Creator';
+            document.getElementById('created-date').textContent = new Date(campaign.created_at).toLocaleDateString();
+            document.getElementById('creator-avatar').src = `https://ui-avatars.com/api/?name=${encodeURIComponent(campaign.creator_name || 'U')}&background=667eea&color=fff&size=100`;
+
+            // AI Score
+            if (campaign.ai_score !== null) {
+                renderScore(campaign.ai_score, campaign.dl_score, campaign.xgb_score);
+
+                // Gemini advice
+                if (campaign.gemini_advice) {
+                    document.getElementById('gemini-advice').innerHTML = formatMarkdown(campaign.gemini_advice);
+                }
+            } else {
+                document.getElementById('score-value').textContent = '--';
+                document.getElementById('dl-score').textContent = '--';
+                document.getElementById('xgb-score').textContent = '--';
+                document.getElementById('score-message').textContent = 'Campaign not yet evaluated by AI.';
+                document.getElementById('gemini-advice').innerHTML = '<p class="text-muted">Get AI evaluation to receive strategic advice.</p>';
+
+                // Show evaluate button for campaign creator
+                const user = auth.isLoggedIn() ? auth.getUser() : null;
+                if (user && user.id === campaign.creator_id) {
+                    const evaluateBtn = document.getElementById('evaluate-btn');
+                    evaluateBtn.classList.remove('hidden');
+                    evaluateBtn.onclick = evaluateCampaign;
+                }
+            }
+
+            // Render funding progress
+            renderFunding();
+        }
+
+        function renderScore(score, dlScore, xgbScore) {
+            const circumference = 2 * Math.PI * 90; // radius = 90
+            const offset = circumference - (score * circumference);
+
+            const progress = document.getElementById('score-progress');
+            progress.style.strokeDasharray = circumference;
+            progress.style.strokeDashoffset = offset;
+
+            // Color based on score
+            if (score >= 0.7) {
+                progress.classList.add('high');
+            } else if (score >= 0.5) {
+                progress.classList.add('medium');
+            } else {
+                progress.classList.add('low');
+            }
+
+            document.getElementById('score-value').textContent = `${(score * 100).toFixed(0)}%`;
+            document.getElementById('dl-score').textContent = `${(dlScore * 100).toFixed(0)}%`;
+            document.getElementById('xgb-score').textContent = `${(xgbScore * 100).toFixed(0)}%`;
+
+            // Score message
+            let message;
+            if (score >= 0.7) {
+                message = '🎉 Excellent! This campaign has a high probability of success.';
+            } else if (score >= 0.5) {
+                message = '👍 Good potential! Consider the AI advice to improve further.';
+            } else if (score >= 0.3) {
+                message = '⚠️ Moderate risk. Review the AI recommendations carefully.';
+            } else {
+                message = '🔴 High risk. Significant improvements needed before launching.';
+            }
+            document.getElementById('score-message').textContent = message;
+        }
+
+        async function evaluateCampaign() {
+            const evaluateBtn = document.getElementById('evaluate-btn');
+            evaluateBtn.disabled = true;
+            evaluateBtn.textContent = '🤖 Analyzing...';
+
+            try {
+                const result = await api.evaluateCampaign(campaign.id);
+                campaign = result.campaign;
+                renderCampaign();
+                evaluateBtn.classList.add('hidden');
+                showToast('AI evaluation complete! 🎉', 'success');
+
+            } catch (error) {
+                showToast(error.message, 'error');
+                evaluateBtn.disabled = false;
+                evaluateBtn.textContent = '🤖 Try Again';
+            }
+        }
+
+        function showError() {
+            document.getElementById('loading-state').classList.add('hidden');
+            document.getElementById('error-state').classList.remove('hidden');
+        }
+
+        function renderFunding() {
+            // Funding progress
+            const raised = campaign.amount_raised || 0;
+            const goal = campaign.usd_goal || 1;
+            const percentage = campaign.funding_percentage || 0;
+            const backers = campaign.backers_count || 0;
+
+            document.getElementById('amount-raised').textContent = '$' + formatNumber(raised);
+            document.getElementById('goal-target').textContent = '$' + formatNumber(goal);
+            document.getElementById('backers-count').textContent = backers;
+            document.getElementById('funding-progress').style.width = percentage + '%';
+            document.getElementById('funding-percentage').textContent = percentage.toFixed(1) + '% funded';
+
+            // Show invest button for logged-in investors (not the creator)
+            const user = auth.isLoggedIn() ? auth.getUser() : null;
+            const investSection = document.getElementById('invest-section');
+            const loginPrompt = document.getElementById('invest-login-prompt');
+
+            if (user && user.id !== campaign.creator_id) {
+                // Logged in and not the creator - show invest form
+                investSection.classList.remove('hidden');
+                loginPrompt.classList.add('hidden');
+            } else if (user && user.id === campaign.creator_id) {
+                // Creator viewing their own campaign
+                investSection.classList.add('hidden');
+                loginPrompt.innerHTML = '<p class="text-muted">This is your campaign</p>';
+            } else {
+                // Not logged in - show sign up prompt
+                investSection.classList.add('hidden');
+                loginPrompt.classList.remove('hidden');
+            }
+        }
+
+        async function investInCampaign() {
+            const user = auth.getUser();
+            if (!user) {
+                showToast('Please log in to invest', 'error');
+                return;
+            }
+
+            const amount = parseFloat(document.getElementById('invest-amount').value);
+            const message = document.getElementById('invest-message').value;
+
+            if (!amount || amount <= 0) {
+                showToast('Please enter a valid amount', 'error');
+                return;
+            }
+
+            const investBtn = document.getElementById('invest-btn');
+            investBtn.disabled = true;
+            investBtn.textContent = '💫 Processing...';
+
+            try {
+                const response = await fetch(`${API_BASE}/campaigns/${campaign.id}/invest`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        investor_id: user.id,
+                        amount: amount,
+                        message: message
+                    })
+                });
+
+                const result = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(result.error || 'Investment failed');
+                }
+
+                // Update campaign with new funding data
+                campaign = result.campaign;
+                renderFunding();
+
+                // Clear form
+                document.getElementById('invest-amount').value = '';
+                document.getElementById('invest-message').value = '';
+
+                showToast(`Successfully invested $${formatNumber(amount)}! 🎉`, 'success');
+
+            } catch (error) {
+                showToast(error.message, 'error');
+            } finally {
+                investBtn.disabled = false;
+                investBtn.textContent = '💵 Invest Now';
+            }
+        }
+
+        // Simple markdown formatter for Gemini advice
+        function formatMarkdown(text) {
+            return text
+                .replace(/^### (.*$)/gim, '<h3>$1</h3>')
+                .replace(/^## (.*$)/gim, '<h2>$1</h2>')
+                .replace(/^# (.*$)/gim, '<h1>$1</h1>')
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                .replace(/^\- (.*$)/gim, '<li>$1</li>')
+                .replace(/^\d+\. (.*$)/gim, '<li>$1</li>')
+                .replace(/\n/g, '<br>');
+        }
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,42 @@
+# Byte-compiled
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+venv/
+env/
+.venv/
+
+# Database
+*.db
+instance/
+
+# IDE
+.vscode/
+.idea/
+.gemini/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Uploads (user-generated content)
+uploads/
+
+# Node modules
+node_modules/
+dist/
+
+# Environment variables (secrets)
+.env
+.env.local
+.env.production
+!.env.example
+
+# Firebase Service Account Key (NEVER commit this)
+fund-ai-*.json
+*-firebase-adminsdk-*.json
+
+# Logs
+*.log

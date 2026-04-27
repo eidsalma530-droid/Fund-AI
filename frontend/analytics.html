@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Campaign Analytics - FundAI">
+    <title>Campaign Analytics - FundAI</title>
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+
+<body>
+    <!-- Navbar -->
+    <nav class="navbar" id="navbar">
+        <div class="container">
+            <a href="index.html" class="logo">
+                <div class="logo-icon"><img src="logo.png" alt="FundAI Logo"></div>
+                <span class="gradient-text">FundAI</span>
+            </a>
+            <div class="nav-links">
+                <a href="campaigns.html" class="nav-link">Campaigns</a>
+                <a href="dashboard.html" class="nav-link">Dashboard</a>
+            </div>
+            <div class="nav-auth" id="nav-auth"></div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="section" style="padding-top: 120px;">
+        <div class="container">
+            <div class="flex justify-between items-center mb-lg">
+                <div>
+                    <h1 class="animate-fade-in-up">📊 Campaign <span class="gradient-text">Analytics</span></h1>
+                    <p class="text-muted" id="campaign-name">Loading...</p>
+                </div>
+                <a href="#" class="btn btn-secondary" id="back-btn">← Back to Campaign</a>
+            </div>
+
+            <!-- Stats Cards -->
+            <div class="stats-grid mb-xl" id="stats-grid">
+                <div class="loading" style="grid-column: 1 / -1;">
+                    <div class="spinner"></div>
+                </div>
+            </div>
+
+            <!-- Charts -->
+            <div class="grid grid-2 mb-xl">
+                <div class="card">
+                    <h3 class="card-title">💰 Funding Progress Over Time</h3>
+                    <div class="chart-container" style="height: 300px;">
+                        <canvas id="funding-chart"></canvas>
+                    </div>
+                </div>
+                <div class="card">
+                    <h3 class="card-title">📈 Key Metrics</h3>
+                    <div id="metrics-container">
+                        <div class="loading">
+                            <div class="spinner"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recent Activity -->
+            <div class="card">
+                <h3 class="card-title">🕐 Recent Investments</h3>
+                <div id="investments-list">
+                    <div class="loading">
+                        <div class="spinner"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-text">© 2024 FundAI. AI-Powered Crowdfunding Platform.</div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Toast Container -->
+    <div class="toast-container" id="toast-container"></div>
+
+    <script src="js/app.js"></script>
+    <script>
+        // Require login
+        if (!auth.isLoggedIn()) {
+            window.location.href = 'login.html';
+        }
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const campaignId = urlParams.get('id');
+
+        if (!campaignId) {
+            showToast('No campaign specified', 'error');
+            setTimeout(() => window.location.href = 'dashboard.html', 1500);
+        }
+
+        document.getElementById('back-btn').href = `campaign-detail.html?id=${campaignId}`;
+
+        let fundingChart = null;
+
+        document.addEventListener('DOMContentLoaded', loadAnalytics);
+
+        async function loadAnalytics() {
+            try {
+                const data = await api.getDetailedAnalytics(campaignId);
+
+                document.getElementById('campaign-name').textContent = data.campaign.name;
+
+                // Stats Cards
+                document.getElementById('stats-grid').innerHTML = `
+                    <div class="stat-card glass-card">
+                        <div class="stat-value">$${formatNumber(data.campaign.amount_raised)}</div>
+                        <div class="stat-label">Total Raised</div>
+                    </div>
+                    <div class="stat-card glass-card">
+                        <div class="stat-value">${data.stats.backers}</div>
+                        <div class="stat-label">Backers</div>
+                    </div>
+                    <div class="stat-card glass-card">
+                        <div class="stat-value">${data.stats.views}</div>
+                        <div class="stat-label">Views</div>
+                    </div>
+                    <div class="stat-card glass-card">
+                        <div class="stat-value">${data.stats.conversion_rate}%</div>
+                        <div class="stat-label">Conversion Rate</div>
+                    </div>
+                `;
+
+                // Metrics
+                document.getElementById('metrics-container').innerHTML = `
+                    <div class="dashboard-item">
+                        <div class="dashboard-item-icon">💵</div>
+                        <div class="dashboard-item-content">
+                            <div class="dashboard-item-title">Average Investment</div>
+                            <div class="dashboard-item-meta">$${data.stats.avg_investment}</div>
+                        </div>
+                    </div>
+                    <div class="dashboard-item">
+                        <div class="dashboard-item-icon">🎯</div>
+                        <div class="dashboard-item-content">
+                            <div class="dashboard-item-title">Funding Goal</div>
+                            <div class="dashboard-item-meta">$${formatNumber(data.campaign.usd_goal)}</div>
+                        </div>
+                    </div>
+                    <div class="dashboard-item">
+                        <div class="dashboard-item-icon">📊</div>
+                        <div class="dashboard-item-content">
+                            <div class="dashboard-item-title">Progress</div>
+                            <div class="dashboard-item-meta">${data.campaign.funding_percentage.toFixed(1)}%</div>
+                        </div>
+                    </div>
+                    <div class="dashboard-item">
+                        <div class="dashboard-item-icon">📤</div>
+                        <div class="dashboard-item-content">
+                            <div class="dashboard-item-title">Shares</div>
+                            <div class="dashboard-item-meta">${data.stats.shares}</div>
+                        </div>
+                    </div>
+                `;
+
+                // Chart
+                const ctx = document.getElementById('funding-chart').getContext('2d');
+
+                // Add goal line data
+                const goalData = data.chart_data.labels.map(() => data.campaign.usd_goal);
+
+                fundingChart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: data.chart_data.labels.length > 0 ? data.chart_data.labels : ['Start'],
+                        datasets: [
+                            {
+                                label: 'Amount Raised',
+                                data: data.chart_data.values.length > 0 ? data.chart_data.values : [0],
+                                borderColor: '#667eea',
+                                backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                                fill: true,
+                                tension: 0.4
+                            },
+                            {
+                                label: 'Goal',
+                                data: goalData.length > 0 ? goalData : [data.campaign.usd_goal],
+                                borderColor: '#f59e0b',
+                                borderDash: [5, 5],
+                                fill: false,
+                                tension: 0
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                labels: { color: '#94a3b8' }
+                            }
+                        },
+                        scales: {
+                            x: {
+                                grid: { color: 'rgba(255,255,255,0.1)' },
+                                ticks: { color: '#94a3b8' }
+                            },
+                            y: {
+                                grid: { color: 'rgba(255,255,255,0.1)' },
+                                ticks: { color: '#94a3b8' }
+                            }
+                        }
+                    }
+                });
+
+                // Load investments
+                const invData = await api.getCampaignInvestments(campaignId);
+                if (invData.investments.length === 0) {
+                    document.getElementById('investments-list').innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-icon">📭</div>
+                            <p class="text-muted">No investments yet</p>
+                        </div>
+                    `;
+                } else {
+                    document.getElementById('investments-list').innerHTML = invData.investments.slice(0, 10).map(inv => `
+                        <div class="dashboard-item">
+                            <div class="dashboard-item-icon">💰</div>
+                            <div class="dashboard-item-content">
+                                <div class="dashboard-item-title">${escapeHtml(inv.user_name)} invested $${inv.amount}</div>
+                                <div class="dashboard-item-meta">${formatDate(inv.created_at)}</div>
+                            </div>
+                        </div>
+                    `).join('');
+                }
+
+            } catch (error) {
+                console.error('Analytics error:', error);
+                document.getElementById('stats-grid').innerHTML = `
+                    <div class="empty-state" style="grid-column: 1 / -1;">
+                        <p class="text-muted">Unable to load analytics</p>
+                    </div>
+                `;
+            }
+        }
+    </script>
+</body>
+
+</html>

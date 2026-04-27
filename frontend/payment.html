@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="FundAI - Complete your investment">
+    <title>Payment - FundAI</title>
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+
+<body>
+    <!-- Navbar -->
+    <nav class="navbar" id="navbar">
+        <div class="container">
+            <a href="index.html" class="logo">
+                <div class="logo-icon"><img src="logo.png" alt="FundAI Logo"></div>
+                <span class="gradient-text">FundAI</span>
+            </a>
+
+            <div class="nav-auth hidden" id="nav-user">
+                <a href="profile.html" class="btn btn-secondary" id="nav-profile-btn">
+                    <span id="nav-user-name">Profile</span>
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="section" style="padding-top: 120px;">
+        <div class="container" style="max-width: 800px;">
+            <h1 class="text-center mb-lg">Complete Your <span class="gradient-text">Investment</span></h1>
+
+            <div class="payment-grid">
+                <!-- Order Summary -->
+                <div class="card" id="order-summary">
+                    <h3 class="card-title">Order Summary</h3>
+                    <div class="loading">
+                        <div class="spinner"></div>
+                    </div>
+                </div>
+
+                <!-- Payment Form -->
+                <div class="card">
+                    <h3 class="card-title">Payment Details</h3>
+                    <p class="text-muted mb-lg">🔒 This is a demo payment - no real charges</p>
+
+                    <form id="payment-form">
+                        <!-- Payment Method -->
+                        <div class="form-group">
+                            <label class="form-label">Payment Method</label>
+                            <div class="payment-methods">
+                                <label class="payment-method-option">
+                                    <input type="radio" name="payment_method" value="card" checked>
+                                    <div class="payment-method-card">
+                                        <span style="font-size: 1.5rem;">💳</span>
+                                        <span>Credit Card</span>
+                                    </div>
+                                </label>
+                                <label class="payment-method-option">
+                                    <input type="radio" name="payment_method" value="paypal">
+                                    <div class="payment-method-card">
+                                        <span style="font-size: 1.5rem;">🅿️</span>
+                                        <span>PayPal</span>
+                                    </div>
+                                </label>
+                                <label class="payment-method-option">
+                                    <input type="radio" name="payment_method" value="apple_pay">
+                                    <div class="payment-method-card">
+                                        <span style="font-size: 1.5rem;"></span>
+                                        <span>Apple Pay</span>
+                                    </div>
+                                </label>
+                                <label class="payment-method-option">
+                                    <input type="radio" name="payment_method" value="crypto">
+                                    <div class="payment-method-card">
+                                        <span style="font-size: 1.5rem;">₿</span>
+                                        <span>Crypto</span>
+                                    </div>
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Card Details -->
+                        <div id="card-details">
+                            <div class="form-group">
+                                <label class="form-label">Cardholder Name</label>
+                                <input type="text" class="form-input" id="card-name" placeholder="John Doe" required>
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label">Card Number</label>
+                                <input type="text" class="form-input" id="card-number" placeholder="4242 4242 4242 4242"
+                                    maxlength="19" required>
+                            </div>
+
+                            <div class="grid grid-2">
+                                <div class="form-group">
+                                    <label class="form-label">Expiry Date</label>
+                                    <input type="text" class="form-input" id="card-expiry" placeholder="MM/YY"
+                                        maxlength="5" required>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">CVC</label>
+                                    <input type="text" class="form-input" id="card-cvc" placeholder="123" maxlength="4"
+                                        required>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Message -->
+                        <div class="form-group">
+                            <label class="form-label">Message to Creator (Optional)</label>
+                            <textarea class="form-input form-textarea" id="message" rows="2"
+                                placeholder="Leave a message..."></textarea>
+                        </div>
+
+                        <!-- Recurring Investment -->
+                        <div class="recurring-toggle">
+                            <div>
+                                <div style="font-weight: 600;">🔄 Make this recurring</div>
+                                <div class="text-muted" style="font-size: 0.85rem;">Invest monthly until campaign ends
+                                </div>
+                            </div>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="recurring-investment">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+
+                        <!-- Recurring Options (hidden by default) -->
+                        <div id="recurring-options" class="hidden" style="margin-bottom: var(--space-lg);">
+                            <label class="form-label">Investment Frequency</label>
+                            <select class="form-input form-select" id="recurring-frequency">
+                                <option value="weekly">Weekly</option>
+                                <option value="biweekly">Every 2 Weeks</option>
+                                <option value="monthly" selected>Monthly</option>
+                            </select>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary btn-lg btn-block" id="pay-btn">
+                            <span id="pay-btn-text">Complete Payment</span>
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Success Modal -->
+            <div class="modal hidden" id="success-modal">
+                <div class="modal-content text-center">
+                    <div style="font-size: 5rem; margin-bottom: 1rem;">🎉</div>
+                    <h2>Payment Successful!</h2>
+                    <p class="text-secondary mt-md" id="success-message">Thank you for your investment!</p>
+                    <div class="success-details glass-card mt-lg" id="receipt">
+                        <!-- Receipt details -->
+                    </div>
+                    <div class="flex gap-md justify-center mt-lg">
+                        <a href="dashboard.html" class="btn btn-secondary">Go to Dashboard</a>
+                        <a href="" class="btn btn-primary" id="view-campaign-btn">View Campaign</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Toast Container -->
+    <div class="toast-container" id="toast-container"></div>
+
+    <script src="js/app.js"></script>
+    <script>
+        // Get URL params
+        const params = new URLSearchParams(window.location.search);
+        const campaignId = params.get('campaign_id');
+        const amount = parseFloat(params.get('amount'));
+        const rewardId = params.get('reward_id');
+
+        if (!campaignId || !amount) {
+            window.location.href = 'campaigns.html';
+        }
+
+        let campaign = null;
+        let reward = null;
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            updateNavbar();
+
+            const user = auth.getUser();
+            if (!user) {
+                window.location.href = `login.html?redirect=payment.html?campaign_id=${campaignId}&amount=${amount}`;
+                return;
+            }
+
+            // Load campaign details
+            try {
+                const data = await api.getCampaign(campaignId);
+                campaign = data.campaign;
+
+                // Find reward if selected
+                if (rewardId && campaign.rewards) {
+                    reward = campaign.rewards.find(r => r.id == rewardId);
+                }
+
+                // Render order summary
+                document.getElementById('order-summary').innerHTML = `
+                    <h3 class="card-title">Order Summary</h3>
+                    <div class="order-item">
+                        <div class="order-campaign">
+                            <div class="order-icon">${getCategoryEmoji(campaign.main_category)}</div>
+                            <div>
+                                <div class="order-name">${escapeHtml(campaign.name)}</div>
+                                <div class="text-muted">by ${escapeHtml(campaign.creator_name)}</div>
+                            </div>
+                        </div>
+                    </div>
+                    ${reward ? `
+                        <div class="order-reward glass-card mt-md">
+                            <div class="reward-title">🎁 ${escapeHtml(reward.title)}</div>
+                            <div class="reward-desc text-muted">${escapeHtml(reward.description)}</div>
+                        </div>
+                    ` : ''}
+                    <div class="order-divider"></div>
+                    <div class="order-total">
+                        <span>Investment Amount</span>
+                        <span class="order-amount">$${amount.toFixed(2)}</span>
+                    </div>
+                `;
+
+                document.getElementById('pay-btn-text').textContent = `Pay $${amount.toFixed(2)}`;
+                document.getElementById('view-campaign-btn').href = `campaign-detail.html?id=${campaignId}`;
+
+            } catch (error) {
+                showToast('Unable to load campaign details', 'error');
+                setTimeout(() => window.location.href = 'campaigns.html', 2000);
+            }
+        });
+
+        // Format card number
+        document.getElementById('card-number').addEventListener('input', (e) => {
+            let value = e.target.value.replace(/\s/g, '').replace(/\D/g, '');
+            value = value.match(/.{1,4}/g)?.join(' ') || value;
+            e.target.value = value;
+        });
+
+        // Format expiry
+        document.getElementById('card-expiry').addEventListener('input', (e) => {
+            let value = e.target.value.replace(/\D/g, '');
+            if (value.length >= 2) {
+                value = value.slice(0, 2) + '/' + value.slice(2, 4);
+            }
+            e.target.value = value;
+        });
+
+        // Payment method toggle
+        document.querySelectorAll('input[name="payment_method"]').forEach(input => {
+            input.addEventListener('change', (e) => {
+                const cardDetails = document.getElementById('card-details');
+                // Only show card details for credit card
+                if (e.target.value === 'card') {
+                    cardDetails.style.display = 'block';
+                } else {
+                    cardDetails.style.display = 'none';
+                }
+            });
+        });
+
+        // Recurring investment toggle
+        document.getElementById('recurring-investment').addEventListener('change', (e) => {
+            const recurringOptions = document.getElementById('recurring-options');
+            if (e.target.checked) {
+                recurringOptions.classList.remove('hidden');
+            } else {
+                recurringOptions.classList.add('hidden');
+            }
+        });
+
+        // Payment form submission
+        document.getElementById('payment-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const user = auth.getUser();
+            if (!user) return;
+
+            const payBtn = document.getElementById('pay-btn');
+            const btnText = document.getElementById('pay-btn-text');
+
+            payBtn.disabled = true;
+            btnText.textContent = 'Processing...';
+
+            try {
+                // Simulate payment processing delay
+                await new Promise(resolve => setTimeout(resolve, 1500));
+
+                const result = await api.processPayment({
+                    user_id: user.id,
+                    campaign_id: parseInt(campaignId),
+                    amount: amount,
+                    reward_id: rewardId ? parseInt(rewardId) : null,
+                    message: document.getElementById('message').value,
+                    payment_method: document.querySelector('input[name="payment_method"]:checked').value
+                });
+
+                // Show success modal
+                document.getElementById('receipt').innerHTML = `
+                    <div class="receipt-row">
+                        <span>Transaction ID</span>
+                        <span class="receipt-value">${result.payment.transaction_id}</span>
+                    </div>
+                    <div class="receipt-row">
+                        <span>Amount</span>
+                        <span class="receipt-value">$${amount.toFixed(2)}</span>
+                    </div>
+                    <div class="receipt-row">
+                        <span>Campaign</span>
+                        <span class="receipt-value">${escapeHtml(campaign.name)}</span>
+                    </div>
+                `;
+
+                document.getElementById('success-message').textContent =
+                    `You've invested $${amount.toFixed(2)} in ${campaign.name}!`;
+
+                document.getElementById('success-modal').classList.remove('hidden');
+
+            } catch (error) {
+                showToast(error.message || 'Payment failed. Please try again.', 'error');
+                payBtn.disabled = false;
+                btnText.textContent = `Pay $${amount.toFixed(2)}`;
+            }
+        });
+    </script>
+</body>
+
+</html>

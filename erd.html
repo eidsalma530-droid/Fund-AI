@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>FundAI — Database ERD</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,sans-serif;background:#f5f5f5}
+h1{font-size:15px;font-weight:600;padding:10px 14px;background:#fff;border-bottom:1px solid #e0e0e0;color:#1a1a1a}
+.toolbar{display:flex;align-items:center;gap:8px;padding:8px 12px;background:#fff;border-bottom:1px solid #e0e0e0;flex-wrap:wrap}
+.tb-label{font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-right:2px}
+.tb-btn{font-size:12px;padding:4px 10px;border:1px solid #d0d0d0;border-radius:6px;background:#fff;color:#333;cursor:pointer}
+.tb-btn:hover{background:#f0f0f0}
+.tb-btn.active{background:#1a56db;color:#fff;border-color:#1a56db}
+.legend{display:flex;gap:14px;font-size:11px;color:#555;padding:6px 12px;background:#fff;border-bottom:1px solid #e0e0e0;flex-wrap:wrap;align-items:center}
+.leg{display:flex;align-items:center;gap:5px}
+.leg-sq{width:12px;height:12px;border-radius:2px;flex-shrink:0}
+#canvas-wrap{overflow:auto;background:#eef0f3;padding:0}
+svg#erd{display:block;cursor:grab}
+svg#erd:active{cursor:grabbing}
+</style>
+</head>
+<body>
+<h1>FundAI — Interactive Entity Relationship Diagram</h1>
+<div class="toolbar">
+  <span class="tb-label">Filter</span>
+  <button class="tb-btn active" onclick="filterGroup('all',this)">All tables (19)</button>
+  <button class="tb-btn" onclick="filterGroup('core',this)">Core</button>
+  <button class="tb-btn" onclick="filterGroup('content',this)">Content</button>
+  <button class="tb-btn" onclick="filterGroup('finance',this)">Finance</button>
+  <button class="tb-btn" onclick="filterGroup('social',this)">Social</button>
+  <button class="tb-btn" onclick="filterGroup('system',this)">System</button>
+  <span style="margin-left:auto;font-size:11px;color:#999">Drag tables · Scroll to pan</span>
+</div>
+<div class="legend">
+  <span class="leg"><span class="leg-sq" style="background:#E6F1FB;border:1.5px solid #185FA5"></span>Strong entity</span>
+  <span class="leg"><span class="leg-sq" style="background:#FAEEDA;border:2px dashed #BA7517"></span>Weak entity</span>
+  <span class="leg"><span class="leg-sq" style="background:#EAF3DE;border:1.5px solid #3B6D11"></span>Associative</span>
+  <span class="leg"><span style="width:24px;height:2px;background:#888;display:inline-block;vertical-align:middle"></span>&nbsp;1:N</span>
+  <span class="leg"><span style="width:24px;height:2px;border-top:2px dashed #aaa;display:inline-block;vertical-align:middle"></span>&nbsp;optional FK</span>
+</div>
+<div id="canvas-wrap">
+<svg id="erd" width="1960" height="1350" xmlns="http://www.w3.org/2000/svg">
+<defs>
+  <marker id="crow-many" viewBox="0 0 16 16" refX="1" refY="8" markerWidth="10" markerHeight="10" orient="auto">
+    <path d="M14 4L2 8L14 12M14 8H2" fill="none" stroke="#888" stroke-width="1.5" stroke-linecap="round"/>
+  </marker>
+  <marker id="crow-one" viewBox="0 0 16 16" refX="14" refY="8" markerWidth="10" markerHeight="10" orient="auto-start-reverse">
+    <line x1="12" y1="4" x2="12" y2="12" stroke="#888" stroke-width="1.5" stroke-linecap="round"/>
+    <line x1="14" y1="4" x2="14" y2="12" stroke="#888" stroke-width="1.5" stroke-linecap="round"/>
+  </marker>
+  <marker id="crow-one-r" viewBox="0 0 16 16" refX="2" refY="8" markerWidth="10" markerHeight="10" orient="auto">
+    <line x1="2" y1="4" x2="2" y2="12" stroke="#888" stroke-width="1.5" stroke-linecap="round"/>
+    <line x1="4" y1="4" x2="4" y2="12" stroke="#888" stroke-width="1.5" stroke-linecap="round"/>
+  </marker>
+  <marker id="crow-many-r" viewBox="0 0 16 16" refX="15" refY="8" markerWidth="10" markerHeight="10" orient="auto-start-reverse">
+    <path d="M2 4L14 8L2 12M2 8H14" fill="none" stroke="#888" stroke-width="1.5" stroke-linecap="round"/>
+  </marker>
+</defs>
+<g id="relations-layer"></g>
+<g id="tables-layer"></g>
+</svg>
+</div>
+
+<script>
+const TABLES = [
+  // CORE
+  {
+    id:'users', label:'users', type:'strong', group:'core', x:60, y:60,
+    cols:[
+      {name:'id',type:'INT',pk:true},
+      {name:'email',type:'VARCHAR',uk:true},
+      {name:'name',type:'VARCHAR'},
+      {name:'password_hash',type:'VARCHAR'},
+      {name:'role',type:'ENUM'},
+      {name:'avatar',type:'VARCHAR'},
+      {name:'about',type:'TEXT'},
+      {name:'is_verified',type:'BOOLEAN'},
+      {name:'is_email_verified',type:'BOOLEAN'},
+      {name:'verification_token',type:'VARCHAR'},
+      {name:'is_admin',type:'BOOLEAN'},
+      {name:'email_preferences',type:'TEXT'},
+      {name:'avg_rating',type:'FLOAT'},
+      {name:'total_reviews',type:'INT'},
+      {name:'created_at',type:'TIMESTAMP'},
+    ]
+  },
+  {
+    id:'campaigns', label:'campaigns', type:'strong', group:'core', x:420, y:40,
+    cols:[
+      {name:'id',type:'INT',pk:true},
+      {name:'creator_id',type:'INT',fk:'users'},
+      {name:'name',type:'VARCHAR'},
+      {name:'blurb',type:'TEXT'},
+      {name:'description',type:'TEXT'},
+      {name:'usd_goal',type:'DECIMAL'},
+      {name:'duration_days',type:'INT'},
+      {name:'prep_days',type:'INT'},
+      {name:'main_category',type:'VARCHAR'},
+      {name:'country',type:'VARCHAR'},
+      {name:'has_video',type:'BOOLEAN'},
+      {name:'video_url',type:'VARCHAR'},
+      {name:'amount_raised',type:'DECIMAL'},
+      {name:'backers_count',type:'INT'},
+      {name:'views_count',type:'INT'},
+      {name:'ai_score',type:'FLOAT'},
+      {name:'dl_score',type:'FLOAT'},
+      {name:'xgb_score',type:'FLOAT'},
+      {name:'gemini_advice',type:'TEXT'},
+      {name:'is_ai_verified',type:'BOOLEAN'},
+      {name:'status',type:'ENUM'},
+      {name:'is_featured',type:'BOOLEAN'},
+      {name:'created_at',type:'TIMESTAMP'},
+      {name:'updated_at',type:'TIMESTAMP'},
+    ]
+  },
+  {
+    id:'rewards', label:'rewards', type:'weak', group:'core', x:810, y:40,
+    cols:[
+      {name:'id',type:'INT',pk:true},
+      {name:'campaign_id',type:'INT',fk:'campaigns'},
+      {name:'title',type:'VARCHAR'},
+      {name:'description',type:'TEXT'},
+      {name:'min_amount',type:'DECIMAL'},
+      {name:'max_backers',type:'INT'},
+      {name:'backers_count',type:'INT'},
+      {name:'estimated_delivery',type:'VARCHAR'},
+      {name:'created_at',type:'TIMESTAMP'},
+    ]
+  },
+  // CONTENT
+  {
+    id:'campaign_images', label:'campaign_images', type:'weak', group:'content', x:810, y:310,
+    cols:[
+      {name:'id',type:'INT',pk:true},
+      {name:'campaign_id',type:'INT',fk:'campaigns'},
+      {name:'image_url',type:'VARCHAR'},
+      {name:'is_primary',type:'BOOLEAN'},
+      {name:'caption',type:'VARCHAR'},
+      {name:'created_at',type:'TIMESTAMP'},
+    ]
+  },
+  {
+    id:'milestones', label:'milestones', type:'weak', group:'content', x:810, y:510,
+    cols:[
+      {name:'id',type:'INT',pk:true},
+      {name:'campaign_id',type:'INT',fk:'campaigns'},
+      {name:'title',type:'VARCHAR'},
+      {name:'description',type:'TEXT'},
+      {name:'target_amount',type:'DECIMAL'},
+      {name:'is_reached',type:'BOOLEAN'},
+      {name:'created_at',type:'TIMESTAMP'},
+    ]
+  },
+  {
+    id:'campaign_updates', label:'campaign_updates', type:'weak', group:'content', x:810, y:690,
+    cols:[
+      {name:'id',type:'INT',pk:true},
+      {name:'campaign_id',type:'INT',fk:'campaigns'},
+      {name:'title',type:'VARCHAR'},
+      {name:'content',type:'TEXT'},
+      {name:'created_at',type:'TIMESTAMP'},
+    ]
+  },
+  {
+    id:'faqs', label:'faqs', type:'weak', group:'content', x:810, y:860,
+    cols:[
+      {name:'id',type:'INT',pk:true},
+      {name:'campaign_id',type:'INT',fk:'campaigns'},
+      {name:'question',type:'VARCHAR'},
+      {name:'answer',type:'TEXT'},
+      {name:'display_order',type:'INT'},
+      {name:'created_at',type:'TIMESTAMP'},
+    ]
+  },
+  {
+    id:'team_members', label:'team_members', type:'weak', group:'content', x:810, y:1040,
+    cols:[
+      {name:'id',type:'INT',pk:true},
+      {name:'campaign_id',type:'INT',fk:'campaigns'},
+      {name:'name',type:'VARCHAR'},
+      {name:'role',type:'VARCHAR'},
+      {name:'avatar',type:'VARCHAR'},
+      {name:'bio',type:'TEXT'},
+      {name:'linkedin_url',type:'VARCHAR'},
+      {name:'created_at',type:'TIMESTAMP'},
+    ]
+  },
+  // FINANCE
+  {
+    id:'investments', label:'investments', type:'assoc', group:'finance', x:390, y:510,
+    cols:[
+      {name:'id',type:'INT',pk:true},
+      {name:'investor_id',type:'INT',fk:'users'},
+      {name:'campaign_id',type:'INT',fk:'campaigns'},
+      {name:'reward_id',type:'INT',fk:'rewards'},
+      {name:'amount',type:'DECIMAL'},
+      {name:'message',type:'TEXT'},
+      {name:'created_at',type:'TIMESTAMP'},
+    ]
+  },
+  {
+    id:'payments', label:'payments', type:'strong', group:'finance', x:390, y:760,
+    cols:[
+      {name:'id',type:'INT',pk:true},
+      {name:'investment_id',type:'INT',fk:'investments'},
+      {name:'user_id',type:'INT',fk:'users'},
+      {name:'amount',type:'DECIMAL'},
+      {name:'payment_method',type:'VARCHAR'},
+      {name:'status',type:'ENUM'},
+      {name:'transaction_id',type:'VARCHAR',uk:true},
+      {name:'created_at',type:'TIMESTAMP'},
+    ]
+  },
+  // SOCIAL
+  {
+    id:'comments', label:'comments', type:'assoc', group:'social', x:60, y:560,
+    cols:[
+      {name:'id',type:'INT',pk:true},
+      {name:'campaign_id',type:'INT',fk:'campaigns'},
+      {name:'user_id',type:'INT',fk:'users'},
+      {name:'parent_id',type:'INT',fk:'comments'},
+      {name:'content',type:'TEXT'},
+      {name:'created_at',type:'TIMESTAMP'},
+    ]
+  },
+  {
+    id:'reviews', label:'reviews', type:'assoc', group:'social', x:60, y:860,
+    cols:[
+      {name:'id',type:'INT',pk:true},
+      {name:'reviewer_id',type:'INT',fk:'users'},
+      {name:'reviewed_id',type:'INT',fk:'users'},
+      {name:'campaign_id',type:'INT',fk:'campaigns'},
+      {name:'rating',type:'TINYINT'},
+      {name:'content',type:'TEXT'},
+      {name:'created_at',type:'TIMESTAMP'},
+    ]
+  },
+  {
+    id:'bookmarks', label:'bookmarks', type:'assoc', group:'social', x:60, y:1080,
+    cols:[
+      {name:'id',type:'INT',pk:true},
+      {name:'user_id',type:'INT',fk:'users'},
+      {name:'campaign_id',type:'INT',fk:'campaigns'},
+      {name:'created_at',type:'TIMESTAMP'},
+    ]
+  },
+  // SYSTEM
+  {
+    id:'messages', label:'messages', type:'assoc', group:'system', x:1180, y:40,
+    cols:[
+      {name:'id',type:'INT',pk:true},
+      {name:'sender_id',type:'INT',fk:'users'},
+      {name:'recipient_id',type:'INT',fk:'users'},
+      {name:'campaign_id',type:'INT',fk:'campaigns'},
+      {name:'subject',type:'VARCHAR'},
+      {name:'content',type:'TEXT'},
+      {name:'is_read',type:'BOOLEAN'},
+      {name:'created_at',type:'TIMESTAMP'},
+    ]
+  },
+  {
+    id:'notifications', label:'notifications', type:'strong', group:'system', x:1180, y:310,
+    cols:[
+      {name:'id',type:'INT',pk:true},
+      {name:'user_id',type:'INT',fk:'users'},
+      {name:'type',type:'ENUM'},
+      {name:'title',type:'VARCHAR'},
+      {name:'message',type:'TEXT'},
+      {name:'link',type:'VARCHAR'},
+      {name:'is_read',type:'BOOLEAN'},
+      {name:'created_at',type:'TIMESTAMP'},
+    ]
+  },
+  {
+    id:'scheduled_updates', label:'scheduled_updates', type:'weak', group:'system', x:1180, y:560,
+    cols:[
+      {name:'id',type:'INT',pk:true},
+      {name:'campaign_id',type:'INT',fk:'campaigns'},
+      {name:'title',type:'VARCHAR'},
+      {name:'content',type:'TEXT'},
+      {name:'scheduled_for',type:'TIMESTAMP'},
+      {name:'is_published',type:'BOOLEAN'},
+      {name:'created_at',type:'TIMESTAMP'},
+    ]
+  },
+  {
+    id:'analytics_events', label:'analytics_events', type:'weak', group:'system', x:1180, y:790,
+    cols:[
+      {name:'id',type:'INT',pk:true},
+      {name:'campaign_id',type:'INT',fk:'campaigns'},
+      {name:'user_id',type:'INT',fk:'users'},
+      {name:'event_type',type:'ENUM'},
+      {name:'amount',type:'DECIMAL'},
+      {name:'created_at',type:'TIMESTAMP'},
+    ]
+  },
+  {
+    id:'referrals', label:'referrals', type:'strong', group:'system', x:1180, y:1000,
+    cols:[
+      {name:'id',type:'INT',pk:true},
+      {name:'user_id',type:'INT',fk:'users'},
+      {name:'code',type:'VARCHAR',uk:true},
+      {name:'uses_count',type:'INT'},
+      {name:'reward_amount',type:'DECIMAL'},
+      {name:'is_active',type:'BOOLEAN'},
+      {name:'created_at',type:'TIMESTAMP'},
+    ]
+  },
+  {
+    id:'referral_uses', label:'referral_uses', type:'assoc', group:'system', x:1560, y:1000,
+    cols:[
+      {name:'id',type:'INT',pk:true},
+      {name:'referral_id',type:'INT',fk:'referrals'},
+      {name:'referred_user_id',type:'INT',fk:'users'},
+      {name:'campaign_id',type:'INT',fk:'campaigns'},
+      {name:'investment_amount',type:'DECIMAL'},
+      {name:'created_at',type:'TIMESTAMP'},
+    ]
+  },
+];
+
+const RELATIONS = [
+  {from:'users',to:'campaigns',card:'1N',label:'creates'},
+  {from:'users',to:'investments',card:'1N',label:'invests'},
+  {from:'users',to:'payments',card:'1N',label:'pays'},
+  {from:'users',to:'comments',card:'1N',label:'writes'},
+  {from:'users',to:'reviews',card:'1N',label:'gives/receives'},
+  {from:'users',to:'bookmarks',card:'1N',label:'saves'},
+  {from:'users',to:'messages',card:'1N',label:'sends/receives'},
+  {from:'users',to:'notifications',card:'1N',label:'receives'},
+  {from:'users',to:'referrals',card:'1N',label:'owns'},
+  {from:'users',to:'referral_uses',card:'1N',label:'referred'},
+  {from:'users',to:'analytics_events',card:'1N',label:'triggers'},
+  {from:'campaigns',to:'rewards',card:'1N',label:'offers'},
+  {from:'campaigns',to:'campaign_images',card:'1N',label:'has'},
+  {from:'campaigns',to:'milestones',card:'1N',label:'defines'},
+  {from:'campaigns',to:'campaign_updates',card:'1N',label:'posts'},
+  {from:'campaigns',to:'faqs',card:'1N',label:'has'},
+  {from:'campaigns',to:'team_members',card:'1N',label:'has'},
+  {from:'campaigns',to:'investments',card:'1N',label:'receives'},
+  {from:'campaigns',to:'comments',card:'1N',label:'has'},
+  {from:'campaigns',to:'reviews',card:'1N',label:'reviewed in'},
+  {from:'campaigns',to:'bookmarks',card:'1N',label:'saved in'},
+  {from:'campaigns',to:'messages',card:'1N',label:'discussed in'},
+  {from:'campaigns',to:'scheduled_updates',card:'1N',label:'schedules'},
+  {from:'campaigns',to:'analytics_events',card:'1N',label:'tracks'},
+  {from:'campaigns',to:'referral_uses',card:'1N',label:'via'},
+  {from:'rewards',to:'investments',card:'1N',label:'chosen in'},
+  {from:'investments',to:'payments',card:'11',label:'has payment'},
+  {from:'comments',to:'comments',card:'1N',label:'replies to'},
+  {from:'referrals',to:'referral_uses',card:'1N',label:'used in'},
+];
+
+const COL_H=22, HEADER_H=30;
+const TC={
+  strong:{fill:'#E6F1FB',stroke:'#185FA5',hdr:'#185FA5',hdrText:'#fff',text:'#042C53',typeText:'#378ADD'},
+  weak:  {fill:'#FAEEDA',stroke:'#BA7517',hdr:'#BA7517',hdrText:'#fff',text:'#412402',typeText:'#BA7517'},
+  assoc: {fill:'#EAF3DE',stroke:'#3B6D11',hdr:'#3B6D11',hdrText:'#fff',text:'#173404',typeText:'#3B6D11'},
+};
+
+function tW(t){return Math.max(180,t.label.length*9+70)}
+function tH(t){return HEADER_H+t.cols.length*COL_H+6}
+
+function anchor(t,side){
+  const w=tW(t),h=tH(t);
+  if(side==='right') return {x:t.x+w,y:t.y+h/2};
+  if(side==='left')  return {x:t.x,  y:t.y+h/2};
+  if(side==='bottom')return {x:t.x+w/2,y:t.y+h};
+  return                    {x:t.x+w/2,y:t.y};
+}
+
+function bestSides(a,b){
+  const acx=a.x+tW(a)/2, bcx=b.x+tW(b)/2;
+  const acy=a.y+tH(a)/2, bcy=b.y+tH(b)/2;
+  if(Math.abs(acx-bcx)>Math.abs(acy-bcy)){
+    return acx<bcx?['right','left']:['left','right'];
+  }
+  return acy<bcy?['bottom','top']:['top','bottom'];
+}
+
+function pathD(p1,p2){
+  const dx=p2.x-p1.x,dy=p2.y-p1.y;
+  if(Math.abs(dx)>Math.abs(dy)){
+    const mx=(p1.x+p2.x)/2;
+    return `M${p1.x},${p1.y} C${mx},${p1.y} ${mx},${p2.y} ${p2.x},${p2.y}`;
+  }
+  const my=(p1.y+p2.y)/2;
+  return `M${p1.x},${p1.y} C${p1.x},${my} ${p2.x},${my} ${p2.x},${p2.y}`;
+}
+
+let activeGroup='all';
+let vis=new Set(TABLES.map(t=>t.id));
+
+function filterGroup(g,btn){
+  activeGroup=g;
+  document.querySelectorAll('.tb-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  vis=new Set(g==='all'?TABLES.map(t=>t.id):TABLES.filter(t=>t.group===g).map(t=>t.id));
+  render();
+}
+
+function render(){
+  const svg=document.getElementById('erd');
+  const tl=document.getElementById('tables-layer');
+  const rl=document.getElementById('relations-layer');
+  tl.innerHTML=''; rl.innerHTML='';
+  const tMap=Object.fromEntries(TABLES.map(t=>[t.id,t]));
+
+  RELATIONS.forEach(rel=>{
+    if(!vis.has(rel.from)||!vis.has(rel.to)) return;
+    const a=tMap[rel.from], b=tMap[rel.to];
+    if(rel.from===rel.to){
+      const w=tW(a),h=tH(a);
+      const x1=a.x+w*0.65,y1=a.y+h,x2=a.x+w,y2=a.y+h*0.65;
+      rl.innerHTML+=`<path d="M${x1},${y1} C${x1},${y1+45} ${x2+45},${y2+45} ${x2},${y2}" fill="none" stroke="#aaa" stroke-width="1.2" stroke-dasharray="5 3" marker-end="url(#crow-many)"/>
+      <text x="${x1+22}" y="${y1+40}" font-size="10" fill="#aaa" text-anchor="middle">${rel.label}</text>`;
+      return;
+    }
+    const [s1,s2]=bestSides(a,b);
+    const p1=anchor(a,s1), p2=anchor(b,s2);
+    const d=pathD(p1,p2);
+    const dashed=rel.card==='11'?'stroke-dasharray="5 3"':'';
+    const mend=rel.card==='1N'?'marker-end="url(#crow-many)"':'marker-end="url(#crow-one)"';
+    const mx=(p1.x+p2.x)/2, my=(p1.y+p2.y)/2;
+    rl.innerHTML+=`<path d="${d}" fill="none" stroke="#aaa" stroke-width="1.2" marker-start="url(#crow-one-r)" ${mend} ${dashed}/>
+    <text x="${mx}" y="${my-4}" font-size="10" fill="#999" text-anchor="middle" style="pointer-events:none">${rel.label}</text>`;
+  });
+
+  TABLES.forEach(t=>{
+    if(!vis.has(t.id)) return;
+    const w=tW(t), h=tH(t), c=TC[t.type];
+    const dash=t.type==='weak'?'stroke-dasharray="6 3"':'';
+    let g=`<g class="tbl" data-id="${t.id}" transform="translate(${t.x},${t.y})">`;
+    g+=`<rect width="${w}" height="${h}" rx="8" fill="${c.fill}" stroke="${c.stroke}" stroke-width="${t.type==='weak'?2:1.5}" ${dash}/>`;
+    g+=`<rect width="${w}" height="${HEADER_H}" rx="0" fill="${c.hdr}" clip-path="url(#hc-${t.id})"/>`;
+    g+=`<defs><clipPath id="hc-${t.id}"><rect width="${w}" height="${HEADER_H}"/><rect x="-1" y="${HEADER_H-8}" width="${w+2}" height="8"/></clipPath></defs>`;
+    g+=`<text x="${w/2}" y="${HEADER_H/2+1}" text-anchor="middle" dominant-baseline="central" font-size="12" font-weight="600" fill="${c.hdrText}">${t.label}</text>`;
+    t.cols.forEach((col,i)=>{
+      const cy=HEADER_H+i*COL_H+COL_H/2+3;
+      const rowBg=i%2===0?'rgba(255,255,255,0.5)':'transparent';
+      g+=`<rect x="1" y="${HEADER_H+i*COL_H+1}" width="${w-2}" height="${COL_H}" fill="${rowBg}"/>`;
+      if(col.pk)      g+=`<text x="9"  y="${cy+1}" dominant-baseline="central" font-size="10" fill="#BA7517" font-weight="600">PK</text>`;
+      else if(col.fk) g+=`<text x="9"  y="${cy+1}" dominant-baseline="central" font-size="10" fill="#3B6D11">FK</text>`;
+      else if(col.uk) g+=`<text x="9"  y="${cy+1}" dominant-baseline="central" font-size="10" fill="#534AB7">UK</text>`;
+      g+=`<text x="38" y="${cy+1}" dominant-baseline="central" font-size="12" fill="${c.text}" font-weight="${col.pk?'600':'400'}">${col.name}</text>`;
+      g+=`<text x="${w-8}" y="${cy+1}" dominant-baseline="central" font-size="10" fill="${c.typeText}" text-anchor="end">${col.type}</text>`;
+    });
+    g+=`</g>`;
+    tl.innerHTML+=g;
+  });
+
+  makeDraggable();
+}
+
+function makeDraggable(){
+  let drag=null,ox=0,oy=0;
+  const svg=document.getElementById('erd');
+  document.querySelectorAll('.tbl').forEach(g=>{
+    g.style.cursor='move';
+    g.addEventListener('mousedown',e=>{
+      const t=TABLES.find(x=>x.id===g.dataset.id);
+      const pt=svg.createSVGPoint();
+      pt.x=e.clientX; pt.y=e.clientY;
+      const sp=pt.matrixTransform(svg.getScreenCTM().inverse());
+      ox=sp.x-t.x; oy=sp.y-t.y;
+      drag=t; e.stopPropagation(); e.preventDefault();
+    });
+  });
+  svg.addEventListener('mousemove',e=>{
+    if(!drag) return;
+    const pt=svg.createSVGPoint();
+    pt.x=e.clientX; pt.y=e.clientY;
+    const sp=pt.matrixTransform(svg.getScreenCTM().inverse());
+    drag.x=Math.max(0,sp.x-ox);
+    drag.y=Math.max(0,sp.y-oy);
+    render();
+  });
+  svg.addEventListener('mouseup',()=>{drag=null;});
+  svg.addEventListener('mouseleave',()=>{drag=null;});
+}
+
+render();
+</script>
+</body>
+</html>

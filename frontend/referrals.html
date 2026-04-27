@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Refer friends to FundAI and earn rewards. Share your unique referral code.">
+    <title>Referral Program - FundAI</title>
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+
+<body>
+    <!-- Navbar -->
+    <nav class="navbar" id="navbar">
+        <div class="container">
+            <a href="index.html" class="logo">
+                <div class="logo-icon"><img src="logo.png" alt="FundAI Logo"></div>
+                <span class="gradient-text">FundAI</span>
+            </a>
+
+            <div class="nav-links">
+                <a href="campaigns.html" class="nav-link">Campaigns</a>
+                <a href="profile.html" class="nav-link">Profile</a>
+            </div>
+
+            <div class="nav-auth hidden" id="nav-user">
+                <a href="profile.html" class="btn btn-secondary" id="nav-profile-btn">Profile</a>
+                <button class="btn btn-secondary" id="nav-logout-btn">Log Out</button>
+            </div>
+        </div>
+    </nav>
+
+    <main style="padding-top: 120px; min-height: 100vh;">
+        <div class="container">
+            <!-- Hero Section -->
+            <div class="text-center mb-lg">
+                <span style="font-size: 4rem;">🎁</span>
+                <h1 style="margin-top: var(--space-md);">Referral <span class="gradient-text">Program</span></h1>
+                <p class="text-secondary" style="max-width: 600px; margin: var(--space-md) auto;">
+                    Invite friends to FundAI and earn 5% of their investments as rewards!
+                </p>
+            </div>
+
+            <!-- Login Required -->
+            <div id="login-required" class="glass-card text-center" style="padding: var(--space-2xl);">
+                <div style="font-size: 3rem; margin-bottom: var(--space-md);">🔒</div>
+                <h3>Login Required</h3>
+                <p class="text-muted mt-md">Please log in to access your referral code.</p>
+                <a href="login.html" class="btn btn-primary mt-lg">Log In</a>
+            </div>
+
+            <!-- Referral Content -->
+            <div id="referral-content" class="hidden">
+                <!-- Referral Card -->
+                <div class="referral-card mb-lg">
+                    <h2>Your Referral Code</h2>
+                    <p class="text-secondary mt-sm">Share this code with friends and family</p>
+
+                    <div class="referral-code">
+                        <span class="referral-code-value" id="referral-code">LOADING...</span>
+                        <button class="btn btn-primary" onclick="copyReferralLink()">📋 Copy Link</button>
+                    </div>
+
+                    <div class="share-buttons" style="justify-content: center; margin-top: var(--space-md);">
+                        <button class="share-btn twitter" onclick="shareReferralTwitter()"
+                            title="Share on Twitter">𝕏</button>
+                        <button class="share-btn facebook" onclick="shareReferralFacebook()"
+                            title="Share on Facebook">f</button>
+                        <button class="share-btn whatsapp" onclick="shareReferralWhatsApp()"
+                            title="Share on WhatsApp">💬</button>
+                    </div>
+
+                    <div class="referral-stats">
+                        <div class="referral-stat">
+                            <div class="referral-stat-value" id="referral-uses">0</div>
+                            <div class="referral-stat-label">Referrals</div>
+                        </div>
+                        <div class="referral-stat">
+                            <div class="referral-stat-value" id="referral-earnings">$0</div>
+                            <div class="referral-stat-label">Earned</div>
+                        </div>
+                        <div class="referral-stat">
+                            <div class="referral-stat-value">5%</div>
+                            <div class="referral-stat-label">Commission</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- How It Works -->
+                <div class="glass-card">
+                    <h3 class="mb-lg">How It Works</h3>
+                    <div class="grid grid-3">
+                        <div class="text-center">
+                            <span style="font-size: 3rem;">📤</span>
+                            <h4 class="mt-md">1. Share Your Code</h4>
+                            <p class="text-muted mt-sm">Send your unique code to friends via social media or messaging
+                            </p>
+                        </div>
+                        <div class="text-center">
+                            <span style="font-size: 3rem;">👥</span>
+                            <h4 class="mt-md">2. Friends Join</h4>
+                            <p class="text-muted mt-sm">They sign up and invest in campaigns using your referral link
+                            </p>
+                        </div>
+                        <div class="text-center">
+                            <span style="font-size: 3rem;">💰</span>
+                            <h4 class="mt-md">3. Earn Rewards</h4>
+                            <p class="text-muted mt-sm">Get 5% of their investment amounts as rewards</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer" style="margin-top: var(--space-2xl);">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-text">
+                    © 2024 FundAI. AI-Powered Crowdfunding Platform.
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Toast Container -->
+    <div class="toast-container" id="toast-container"></div>
+
+    <script src="js/app.js"></script>
+    <script>
+        let referralData = null;
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            updateNavbar();
+
+            const user = auth.getUser();
+            if (!user) {
+                document.getElementById('login-required').classList.remove('hidden');
+                return;
+            }
+
+            document.getElementById('login-required').classList.add('hidden');
+            document.getElementById('referral-content').classList.remove('hidden');
+
+            await loadReferral(user.id);
+        });
+
+        async function loadReferral(userId) {
+            try {
+                const result = await api.getUserReferral(userId);
+                referralData = result.referral;
+
+                document.getElementById('referral-code').textContent = referralData.code;
+                document.getElementById('referral-uses').textContent = referralData.uses_count;
+                document.getElementById('referral-earnings').textContent = '$' + formatNumber(referralData.reward_amount);
+            } catch (error) {
+                showToast('Failed to load referral data', 'error');
+            }
+        }
+
+        function copyReferralLink() {
+            if (!referralData) return;
+            const url = `${window.location.origin}?ref=${referralData.code}`;
+            copyToClipboard(url);
+        }
+
+        function shareReferralTwitter() {
+            if (!referralData) return;
+            const url = `${window.location.origin}?ref=${referralData.code}`;
+            shareOnTwitter('Join me on FundAI!', url);
+        }
+
+        function shareReferralFacebook() {
+            if (!referralData) return;
+            const url = `${window.location.origin}?ref=${referralData.code}`;
+            shareOnFacebook(url);
+        }
+
+        function shareReferralWhatsApp() {
+            if (!referralData) return;
+            const url = `${window.location.origin}?ref=${referralData.code}`;
+            shareOnWhatsApp('Join me on FundAI and invest in amazing campaigns!', url);
+        }
+    </script>
+</body>
+
+</html>

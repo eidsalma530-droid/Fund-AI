@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description"
+        content="Create a new crowdfunding campaign on FundAI and get AI-powered success predictions.">
+    <title>Create Campaign - FundAI</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+
+<body>
+    <!-- Navbar -->
+    <nav class="navbar" id="navbar">
+        <div class="container">
+            <a href="index.html" class="logo">
+                <div class="logo-icon"><img src="logo.png" alt="FundAI Logo"></div>
+                <span class="gradient-text">FundAI</span>
+            </a>
+
+            <div class="nav-links">
+                <a href="campaigns.html" class="nav-link">Campaigns</a>
+                <a href="profile.html" class="nav-link">Profile</a>
+            </div>
+
+            <div class="nav-auth" id="nav-user">
+                <button class="btn btn-secondary" id="nav-logout-btn" onclick="auth.logout()">Log Out</button>
+            </div>
+        </div>
+    </nav>
+
+    <main style="padding-top: 120px; min-height: 100vh;">
+        <div class="container" style="max-width: 900px;">
+            <div class="text-center mb-lg">
+                <h1>Create Your <span class="gradient-text">Campaign</span></h1>
+                <p class="text-secondary">Fill in the details and get AI-powered success predictions</p>
+            </div>
+
+            <form class="glass-card" id="campaign-form">
+                <div id="form-alert"></div>
+
+                <!-- Campaign Image Section -->
+                <div class="form-section">
+                    <h3 class="form-section-title">📸 Campaign Image</h3>
+                    <div class="form-group">
+                        <label class="form-label">Main Campaign Image *</label>
+                        <div class="image-upload-area" id="campaign-image-area">
+                            <input type="file" id="campaign-image" name="campaign-image" accept="image/*" class="hidden"
+                                required>
+                            <div class="image-upload-placeholder" id="image-placeholder"
+                                onclick="document.getElementById('campaign-image').click()">
+                                <span style="font-size: 3rem;">📷</span>
+                                <p>Click to upload campaign image</p>
+                                <small class="text-muted">Recommended: 1200x675px (16:9)</small>
+                            </div>
+                            <div class="image-preview hidden" id="image-preview">
+                                <img id="preview-img" src="" alt="Preview">
+                                <button type="button" class="btn btn-sm btn-secondary remove-image"
+                                    onclick="removeImage()">✕ Remove</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Basic Info Section -->
+                <div class="form-section">
+                    <h3 class="form-section-title">📋 Basic Information</h3>
+
+                    <!-- Campaign Name -->
+                    <div class="form-group">
+                        <label class="form-label" for="name">Campaign Name *</label>
+                        <input type="text" id="name" name="name" class="form-input"
+                            placeholder="Give your project a memorable name" required maxlength="200">
+                    </div>
+
+                    <!-- Blurb / Pitch -->
+                    <div class="form-group">
+                        <label class="form-label" for="blurb">Short Pitch (Blurb) *</label>
+                        <textarea id="blurb" name="blurb" class="form-input form-textarea"
+                            placeholder="Describe your project in a compelling way (this is what people see first!)"
+                            required maxlength="500"></textarea>
+                        <small class="text-muted">This is the most important text for AI evaluation. Make it
+                            count!</small>
+                    </div>
+
+                    <!-- Category -->
+                    <div class="form-group">
+                        <label class="form-label" for="category">Category *</label>
+                        <select id="category" name="category" class="form-input form-select" required>
+                            <option value="">Select a category</option>
+                            <option value="Technology">Technology</option>
+                            <option value="Design">Design</option>
+                            <option value="Games">Games</option>
+                            <option value="Film & Video">Film & Video</option>
+                            <option value="Music">Music</option>
+                            <option value="Food">Food</option>
+                            <option value="Publishing">Publishing</option>
+                            <option value="Art">Art</option>
+                            <option value="Fashion">Fashion</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Funding Section -->
+                <div class="form-section">
+                    <h3 class="form-section-title">💰 Funding Details</h3>
+
+                    <!-- Funding Goal -->
+                    <div class="form-group">
+                        <label class="form-label" for="goal">Funding Goal (USD) *</label>
+                        <input type="number" id="goal" name="goal" class="form-input" placeholder="10000" min="100"
+                            max="10000000" required>
+                        <small class="text-muted">Be realistic - campaigns with achievable goals tend to succeed more
+                            often.</small>
+                    </div>
+
+                    <!-- Duration -->
+                    <div class="grid grid-2">
+                        <div class="form-group">
+                            <label class="form-label" for="duration">Campaign Duration (Days) *</label>
+                            <input type="number" id="duration" name="duration" class="form-input" placeholder="30"
+                                min="1" max="60" value="30" required>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="prep-days">Preparation Days</label>
+                            <input type="number" id="prep-days" name="prep-days" class="form-input" placeholder="30"
+                                min="1" max="365" value="30">
+                            <small class="text-muted">How long you've been planning</small>
+                        </div>
+                    </div>
+
+                    <!-- Country -->
+                    <div class="form-group">
+                        <label class="form-label" for="country">Country *</label>
+                        <select id="country" name="country" class="form-input form-select" required>
+                            <option value="">Select your country</option>
+                            <option value="US">United States</option>
+                            <option value="GB">United Kingdom</option>
+                            <option value="CA">Canada</option>
+                            <option value="AU">Australia</option>
+                            <option value="DE">Germany</option>
+                            <option value="FR">France</option>
+                        </select>
+                    </div>
+
+                    <!-- Has Video -->
+                    <div class="form-group">
+                        <label class="form-checkbox-group">
+                            <input type="checkbox" id="has-video" name="has-video" class="form-checkbox">
+                            <span>This campaign will have a video</span>
+                        </label>
+                        <small class="text-muted">Campaigns with videos typically have higher success rates!</small>
+                    </div>
+                </div>
+
+                <!-- Rewards Section -->
+                <div class="form-section">
+                    <h3 class="form-section-title">🎁 Reward Tiers *</h3>
+                    <p class="text-muted mb-md">Add at least one reward tier for your backers. More tiers = more
+                        options!</p>
+
+                    <div id="rewards-container">
+                        <!-- Reward tiers will be added here -->
+                    </div>
+
+                    <button type="button" class="btn btn-secondary btn-block mt-md" id="add-reward-btn"
+                        onclick="addRewardTier()">
+                        ➕ Add Reward Tier
+                    </button>
+                </div>
+
+                <div class="flex gap-md mt-lg">
+                    <button type="submit" class="btn btn-primary btn-lg" id="submit-btn">
+                        📝 Create Campaign
+                    </button>
+                    <button type="button" class="btn btn-accent btn-lg" id="evaluate-btn" disabled>
+                        🤖 Create & Evaluate with AI
+                    </button>
+                </div>
+
+                <p class="text-muted mt-md text-center" style="font-size: 0.85rem;">
+                    💡 Tip: Create first, then evaluate to see AI predictions and get Gemini advice!
+                </p>
+            </form>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-text">
+                    © 2024 FundAI. AI-Powered Crowdfunding Platform.
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Toast Container -->
+    <div class="toast-container" id="toast-container"></div>
+
+    <script src="js/app.js"></script>
+    <script>
+        // Require creator login
+        if (!auth.isLoggedIn()) {
+            window.location.href = 'login.html';
+        }
+
+        const user = auth.getUser();
+        if (user.role !== 'creator') {
+            showToast('Only creators can create campaigns', 'error');
+            setTimeout(() => window.location.href = 'campaigns.html', 1500);
+        }
+
+        let createdCampaignId = null;
+        let campaignImageFile = null;
+        let rewardCount = 0;
+        const rewardImages = {};
+
+        // Initialize with one reward tier
+        document.addEventListener('DOMContentLoaded', () => {
+            addRewardTier();
+        });
+
+        // Campaign image preview
+        document.getElementById('campaign-image').addEventListener('change', function (e) {
+            const file = e.target.files[0];
+            if (file) {
+                campaignImageFile = file;
+                const reader = new FileReader();
+                reader.onload = function (e) {
+                    document.getElementById('preview-img').src = e.target.result;
+                    document.getElementById('image-placeholder').classList.add('hidden');
+                    document.getElementById('image-preview').classList.remove('hidden');
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        function removeImage() {
+            campaignImageFile = null;
+            document.getElementById('campaign-image').value = '';
+            document.getElementById('image-placeholder').classList.remove('hidden');
+            document.getElementById('image-preview').classList.add('hidden');
+        }
+
+        // Add reward tier
+        function addRewardTier() {
+            rewardCount++;
+            const container = document.getElementById('rewards-container');
+            const rewardHtml = `
+                <div class="reward-tier-form glass-card" id="reward-${rewardCount}" data-reward-id="${rewardCount}">
+                    <div class="flex justify-between items-center mb-md">
+                        <h4>🎁 Reward Tier ${rewardCount}</h4>
+                        ${rewardCount > 1 ? `<button type="button" class="btn btn-sm btn-secondary" onclick="removeReward(${rewardCount})">✕ Remove</button>` : ''}
+                    </div>
+                    
+                    <div class="grid grid-2">
+                        <div class="form-group">
+                            <label class="form-label">Tier Title *</label>
+                            <input type="text" class="form-input reward-title" placeholder="e.g., Early Bird Special" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Minimum Amount ($) *</label>
+                            <input type="number" class="form-input reward-amount" placeholder="25" min="1" required>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Description *</label>
+                        <textarea class="form-input form-textarea reward-desc" rows="2" placeholder="Describe what backers get at this tier..." required></textarea>
+                    </div>
+                    
+                    <div class="grid grid-2">
+                        <div class="form-group">
+                            <label class="form-label">Estimated Delivery</label>
+                            <input type="text" class="form-input reward-delivery" placeholder="e.g., March 2025">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Max Backers (optional)</label>
+                            <input type="number" class="form-input reward-max" placeholder="Leave empty for unlimited" min="1">
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Reward Image (optional)</label>
+                        <div class="reward-image-upload">
+                            <input type="file" class="reward-image-input hidden" id="reward-image-${rewardCount}" accept="image/*" onchange="handleRewardImage(${rewardCount}, this)">
+                            <div class="reward-image-placeholder" onclick="document.getElementById('reward-image-${rewardCount}').click()">
+                                <span>📷 Add Image</span>
+                            </div>
+                            <div class="reward-image-preview hidden" id="reward-preview-${rewardCount}">
+                                <img src="" alt="Reward preview">
+                                <button type="button" class="btn btn-sm btn-secondary" onclick="removeRewardImage(${rewardCount})">✕</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            container.insertAdjacentHTML('beforeend', rewardHtml);
+        }
+
+        function removeReward(id) {
+            document.getElementById(`reward-${id}`).remove();
+            delete rewardImages[id];
+        }
+
+        function handleRewardImage(id, input) {
+            const file = input.files[0];
+            if (file) {
+                rewardImages[id] = file;
+                const reader = new FileReader();
+                reader.onload = function (e) {
+                    const preview = document.getElementById(`reward-preview-${id}`);
+                    preview.querySelector('img').src = e.target.result;
+                    preview.classList.remove('hidden');
+                    preview.previousElementSibling.classList.add('hidden');
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
+        function removeRewardImage(id) {
+            delete rewardImages[id];
+            document.getElementById(`reward-image-${id}`).value = '';
+            const preview = document.getElementById(`reward-preview-${id}`);
+            preview.classList.add('hidden');
+            preview.previousElementSibling.classList.remove('hidden');
+        }
+
+        // Collect rewards data
+        function getRewardsData() {
+            const rewards = [];
+            document.querySelectorAll('.reward-tier-form').forEach((el) => {
+                const id = el.dataset.rewardId;
+                rewards.push({
+                    id: id,
+                    title: el.querySelector('.reward-title').value.trim(),
+                    description: el.querySelector('.reward-desc').value.trim(),
+                    min_amount: parseFloat(el.querySelector('.reward-amount').value),
+                    estimated_delivery: el.querySelector('.reward-delivery').value.trim(),
+                    max_backers: el.querySelector('.reward-max').value ? parseInt(el.querySelector('.reward-max').value) : null,
+                    hasImage: !!rewardImages[id]
+                });
+            });
+            return rewards;
+        }
+
+        // Validate rewards
+        function validateRewards() {
+            const rewards = getRewardsData();
+            if (rewards.length === 0) {
+                return { valid: false, message: 'Please add at least one reward tier' };
+            }
+            for (const r of rewards) {
+                if (!r.title || !r.description || !r.min_amount) {
+                    return { valid: false, message: 'Please fill in all required fields for each reward tier' };
+                }
+            }
+            return { valid: true };
+        }
+
+        // Form submission
+        document.getElementById('campaign-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const form = e.target;
+            const submitBtn = document.getElementById('submit-btn');
+            const evaluateBtn = document.getElementById('evaluate-btn');
+            const alertDiv = document.getElementById('form-alert');
+
+            // Campaign image is now optional
+            // Validate rewards
+            const rewardValidation = validateRewards();
+            if (!rewardValidation.valid) {
+                alertDiv.innerHTML = `<div class="alert alert-error">${rewardValidation.message}</div>`;
+                return;
+            }
+
+            const campaignData = {
+                creator_id: user.id,
+                name: form.name.value.trim(),
+                blurb: form.blurb.value.trim(),
+                main_category: form.category.value,
+                usd_goal: parseFloat(form.goal.value),
+                duration_days: parseInt(form.duration.value),
+                prep_days: parseInt(form['prep-days'].value) || 30,
+                country: form.country.value,
+                has_video: form['has-video'].checked
+            };
+
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Creating...';
+            alertDiv.innerHTML = '<div class="alert alert-warning">⏳ Creating campaign...</div>';
+
+            try {
+                // Step 1: Create campaign
+                const result = await api.createCampaign(campaignData);
+                createdCampaignId = result.campaign.id;
+
+                // Step 2: Upload campaign image (if provided)
+                if (campaignImageFile) {
+                    try {
+                        await api.uploadCampaignImage(createdCampaignId, campaignImageFile, true, 'Main campaign image');
+                    } catch (imgError) {
+                        console.warn('Image upload failed:', imgError);
+                        // Continue without image - campaign still created
+                    }
+                }
+
+                // Step 3: Create rewards
+                const rewards = getRewardsData();
+                for (const reward of rewards) {
+                    await api.createReward(createdCampaignId, {
+                        title: reward.title,
+                        description: reward.description,
+                        min_amount: reward.min_amount,
+                        estimated_delivery: reward.estimated_delivery,
+                        max_backers: reward.max_backers
+                    });
+                }
+
+                showToast('Campaign created with rewards! 🎉', 'success');
+                alertDiv.innerHTML = '<div class="alert alert-success">✅ Campaign created! Click "Create & Evaluate with AI" to get predictions.</div>';
+
+                submitBtn.textContent = '✓ Created';
+                evaluateBtn.disabled = false;
+                evaluateBtn.onclick = () => evaluateCampaign(createdCampaignId);
+
+            } catch (error) {
+                alertDiv.innerHTML = `<div class="alert alert-error">${error.message}</div>`;
+                submitBtn.disabled = false;
+                submitBtn.textContent = '📝 Create Campaign';
+            }
+        });
+
+        async function evaluateCampaign(campaignId) {
+            const evaluateBtn = document.getElementById('evaluate-btn');
+            const alertDiv = document.getElementById('form-alert');
+
+            evaluateBtn.disabled = true;
+            evaluateBtn.textContent = '🤖 Analyzing...';
+            alertDiv.innerHTML = '<div class="alert alert-warning">⏳ AI is analyzing your campaign. This may take a moment...</div>';
+
+            try {
+                await api.evaluateCampaign(campaignId);
+                showToast('AI evaluation complete! 🤖', 'success');
+                window.location.href = `campaign-detail.html?id=${campaignId}`;
+            } catch (error) {
+                alertDiv.innerHTML = `<div class="alert alert-error">AI Evaluation Error: ${error.message}</div>`;
+                evaluateBtn.disabled = false;
+                evaluateBtn.textContent = '🤖 Try Again';
+            }
+        }
+    </script>
+</body>
+
+</html>

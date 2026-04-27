@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FundAI Campaign Widget</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #0f0f23 100%);
+            color: #f8fafc;
+        }
+
+        .widget {
+            max-width: 350px;
+            background: rgba(26, 26, 46, 0.95);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 8px 40px rgba(0, 0, 0, 0.5);
+        }
+
+        .widget-header {
+            padding: 20px;
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.2), rgba(118, 75, 162, 0.2));
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .widget-category {
+            font-size: 0.75rem;
+            color: #667eea;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .widget-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin: 8px 0;
+        }
+
+        .widget-creator {
+            font-size: 0.85rem;
+            color: #94a3b8;
+        }
+
+        .widget-body {
+            padding: 20px;
+        }
+
+        .widget-progress {
+            height: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 12px;
+        }
+
+        .widget-progress-bar {
+            height: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 4px;
+            transition: width 0.5s ease;
+        }
+
+        .widget-stats {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 16px;
+        }
+
+        .widget-stat {
+            text-align: center;
+        }
+
+        .widget-stat-value {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: #667eea;
+        }
+
+        .widget-stat-label {
+            font-size: 0.75rem;
+            color: #64748b;
+        }
+
+        .widget-ai {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px;
+            background: rgba(102, 126, 234, 0.1);
+            border-radius: 8px;
+            margin-bottom: 16px;
+        }
+
+        .widget-ai-score {
+            font-size: 1.25rem;
+            font-weight: 700;
+        }
+
+        .widget-ai-label {
+            font-size: 0.85rem;
+            color: #94a3b8;
+        }
+
+        .widget-btn {
+            display: block;
+            width: 100%;
+            padding: 12px 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            text-align: center;
+            text-decoration: none;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .widget-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .widget-footer {
+            padding: 12px 20px;
+            background: rgba(0, 0, 0, 0.2);
+            text-align: center;
+            font-size: 0.75rem;
+            color: #64748b;
+        }
+
+        .widget-footer a {
+            color: #667eea;
+            text-decoration: none;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="widget" id="fundai-widget">
+        <div class="widget-header">
+            <div class="widget-category" id="widget-category">Loading...</div>
+            <h3 class="widget-title" id="widget-title">Loading campaign...</h3>
+            <div class="widget-creator" id="widget-creator">by Creator</div>
+        </div>
+        <div class="widget-body">
+            <div class="widget-progress">
+                <div class="widget-progress-bar" id="widget-progress" style="width: 0%"></div>
+            </div>
+            <div class="widget-stats">
+                <div class="widget-stat">
+                    <div class="widget-stat-value" id="widget-raised">$0</div>
+                    <div class="widget-stat-label">Raised</div>
+                </div>
+                <div class="widget-stat">
+                    <div class="widget-stat-value" id="widget-goal">$0</div>
+                    <div class="widget-stat-label">Goal</div>
+                </div>
+                <div class="widget-stat">
+                    <div class="widget-stat-value" id="widget-backers">0</div>
+                    <div class="widget-stat-label">Backers</div>
+                </div>
+            </div>
+            <div class="widget-ai">
+                <span>🤖</span>
+                <div>
+                    <div class="widget-ai-score" id="widget-ai-score">--%</div>
+                    <div class="widget-ai-label">AI Success Score</div>
+                </div>
+            </div>
+            <a href="#" class="widget-btn" id="widget-btn" target="_blank">View on FundAI →</a>
+        </div>
+        <div class="widget-footer">
+            Powered by <a href="https://fundai.com" target="_blank">FundAI</a>
+        </div>
+    </div>
+
+    <script>
+        // Get campaign ID from URL params
+        const urlParams = new URLSearchParams(window.location.search);
+        const campaignId = urlParams.get('id') || '1';
+        const baseUrl = window.location.origin || 'http://localhost:5000';
+
+        async function loadCampaign() {
+            try {
+                const response = await fetch(`${baseUrl}/api/campaigns/${campaignId}`);
+                const data = await response.json();
+                const campaign = data.campaign;
+
+                document.getElementById('widget-category').textContent = campaign.main_category;
+                document.getElementById('widget-title').textContent = campaign.name;
+                document.getElementById('widget-creator').textContent = `by ${campaign.creator_name}`;
+                document.getElementById('widget-raised').textContent = `$${campaign.amount_raised?.toLocaleString() || 0}`;
+                document.getElementById('widget-goal').textContent = `$${campaign.usd_goal?.toLocaleString() || 0}`;
+                document.getElementById('widget-backers').textContent = campaign.backers_count || 0;
+                document.getElementById('widget-progress').style.width = `${campaign.funding_percentage || 0}%`;
+                document.getElementById('widget-ai-score').textContent = campaign.ai_score
+                    ? `${(campaign.ai_score * 100).toFixed(0)}%`
+                    : 'N/A';
+                document.getElementById('widget-btn').href = `${baseUrl}/campaign-detail.html?id=${campaignId}`;
+            } catch (error) {
+                console.error('Failed to load campaign:', error);
+            }
+        }
+
+        loadCampaign();
+    </script>
+</body>
+
+</html>

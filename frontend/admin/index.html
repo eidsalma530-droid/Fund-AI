@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="FundAI Admin Panel">
+    <title>Admin Panel - FundAI</title>
+    <link rel="icon" type="image/png" href="../favicon.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../css/styles.css">
+</head>
+
+<body>
+    <!-- Admin Header -->
+    <header class="admin-header">
+        <a href="../index.html" class="logo">
+            <div class="logo-icon"><img src="../logo.png" alt="FundAI Logo"></div>
+            <span class="gradient-text">FundAI</span>
+            <span class="admin-badge warning">ADMIN</span>
+        </a>
+        <nav class="admin-nav">
+            <a href="index.html" class="admin-nav-link active">Dashboard</a>
+            <a href="users.html" class="admin-nav-link">Users</a>
+            <a href="campaigns.html" class="admin-nav-link">Campaigns</a>
+        </nav>
+        <div>
+            <a href="../index.html" class="btn btn-secondary">← Back to Site</a>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="section" style="padding-top: 40px;">
+        <div class="container">
+            <h1 class="mb-lg">Admin <span class="gradient-text">Dashboard</span></h1>
+
+            <!-- Stats Grid -->
+            <div class="stats-grid mb-xl" id="stats-grid">
+                <div class="loading" style="grid-column: 1 / -1;">
+                    <div class="spinner"></div>
+                </div>
+            </div>
+
+            <!-- Quick Actions -->
+            <div class="grid grid-2 mb-xl">
+                <div class="card">
+                    <h3 class="card-title">📊 Platform Overview</h3>
+                    <div id="platform-overview">
+                        <div class="loading">
+                            <div class="spinner"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3 class="card-title">🔧 Quick Actions</h3>
+                    <div class="quick-actions">
+                        <a href="users.html" class="btn btn-secondary btn-block">👥 Manage Users</a>
+                        <a href="campaigns.html" class="btn btn-secondary btn-block">📋 Manage Campaigns</a>
+                        <button class="btn btn-primary btn-block" onclick="refreshStats()">🔄 Refresh Stats</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recent Activity -->
+            <div class="card">
+                <h3 class="card-title">📈 Recent Campaigns</h3>
+                <div class="table-responsive">
+                    <table class="admin-table" id="campaigns-table">
+                        <thead>
+                            <tr>
+                                <th>Campaign</th>
+                                <th>Creator</th>
+                                <th>Goal</th>
+                                <th>Raised</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="campaigns-tbody">
+                            <tr>
+                                <td colspan="6" class="text-center">
+                                    <div class="loading">
+                                        <div class="spinner"></div>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Toast Container -->
+    <div class="toast-container" id="toast-container"></div>
+
+    <script src="../js/app.js"></script>
+    <script>
+        // Check admin access
+        const user = auth.getUser();
+        if (!user || !user.is_admin) {
+            // For demo purposes, allow access but show warning
+            console.warn('Admin access - demo mode');
+        }
+
+        document.addEventListener('DOMContentLoaded', loadAdminData);
+
+        async function loadAdminData() {
+            try {
+                const stats = await api.getAdminStats();
+
+                // Render stats
+                document.getElementById('stats-grid').innerHTML = `
+                    <div class="stat-card glass-card">
+                        <div class="stat-value">${stats.stats.total_users}</div>
+                        <div class="stat-label">Total Users</div>
+                    </div>
+                    <div class="stat-card glass-card">
+                        <div class="stat-value">${stats.stats.total_campaigns}</div>
+                        <div class="stat-label">Total Campaigns</div>
+                    </div>
+                    <div class="stat-card glass-card">
+                        <div class="stat-value">$${formatNumber(stats.stats.total_raised)}</div>
+                        <div class="stat-label">Total Raised</div>
+                    </div>
+                    <div class="stat-card glass-card">
+                        <div class="stat-value">${stats.stats.total_investments}</div>
+                        <div class="stat-label">Total Investments</div>
+                    </div>
+                `;
+
+                // Platform overview
+                document.getElementById('platform-overview').innerHTML = `
+                    <div class="dashboard-item" style="margin: 0;">
+                        <div class="dashboard-item-content">
+                            <div class="flex justify-between mb-sm">
+                                <span>Creators</span>
+                                <strong>${stats.stats.total_creators}</strong>
+                            </div>
+                            <div class="flex justify-between mb-sm">
+                                <span>Investors</span>
+                                <strong>${stats.stats.total_investors}</strong>
+                            </div>
+                            <div class="flex justify-between mb-sm">
+                                <span>Active Campaigns</span>
+                                <strong>${stats.stats.active_campaigns}</strong>
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                // Load recent campaigns
+                const campaignsData = await api.getAllCampaigns();
+                const campaigns = campaignsData.campaigns.slice(0, 10);
+
+                if (campaigns.length === 0) {
+                    document.getElementById('campaigns-tbody').innerHTML = `
+                        <tr><td colspan="6" class="text-center text-muted">No campaigns yet</td></tr>
+                    `;
+                } else {
+                    document.getElementById('campaigns-tbody').innerHTML = campaigns.map(c => `
+                        <tr>
+                            <td>
+                                <a href="../campaign-detail.html?id=${c.id}">${escapeHtml(c.name)}</a>
+                                ${c.is_featured ? '<span class="admin-badge warning">Featured</span>' : ''}
+                                ${c.is_ai_verified ? '<span class="admin-badge success">Verified</span>' : ''}
+                            </td>
+                            <td>${escapeHtml(c.creator_name)}</td>
+                            <td>$${formatNumber(c.usd_goal)}</td>
+                            <td>$${formatNumber(c.amount_raised)}</td>
+                            <td><span class="admin-badge ${getStatusBadgeClass(c.status)}">${c.status}</span></td>
+                            <td>
+                                <button class="btn btn-sm btn-secondary" onclick="toggleFeatured(${c.id})">
+                                    ${c.is_featured ? '★' : '☆'}
+                                </button>
+                                ${!c.is_ai_verified ? `
+                                    <button class="btn btn-sm btn-primary" onclick="verifyCampaign(${c.id})">✓</button>
+                                ` : ''}
+                            </td>
+                        </tr>
+                    `).join('');
+                }
+
+            } catch (error) {
+                console.error('Admin data error:', error);
+                document.getElementById('stats-grid').innerHTML = `
+                    <div class="empty-state" style="grid-column: 1 / -1;">
+                        <p class="text-muted">Unable to load admin data. Make sure the server is running.</p>
+                    </div>
+                `;
+            }
+        }
+
+        function getStatusBadgeClass(status) {
+            const classes = {
+                'pending': 'warning',
+                'evaluated': 'success',
+                'active': 'success',
+                'funded': 'success',
+                'failed': 'danger'
+            };
+            return classes[status] || 'warning';
+        }
+
+        async function toggleFeatured(campaignId) {
+            try {
+                await api.toggleFeatured(campaignId);
+                showToast('Campaign featured status updated', 'success');
+                loadAdminData();
+            } catch (error) {
+                showToast(error.message, 'error');
+            }
+        }
+
+        async function verifyCampaign(campaignId) {
+            try {
+                await api.verifyCampaign(campaignId);
+                showToast('Campaign verified', 'success');
+                loadAdminData();
+            } catch (error) {
+                showToast(error.message, 'error');
+            }
+        }
+
+        function refreshStats() {
+            loadAdminData();
+            showToast('Stats refreshed', 'success');
+        }
+    </script>
+</body>
+
+</html>

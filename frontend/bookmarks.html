@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="FundAI - Your saved campaigns">
+    <title>Saved Campaigns - FundAI</title>
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+
+<body>
+    <!-- Navbar -->
+    <nav class="navbar" id="navbar">
+        <div class="container">
+            <a href="index.html" class="logo">
+                <div class="logo-icon"><img src="logo.png" alt="FundAI Logo"></div>
+                <span class="gradient-text">FundAI</span>
+            </a>
+
+            <div class="nav-links">
+                <a href="campaigns.html" class="nav-link">Campaigns</a>
+                <a href="dashboard.html" class="nav-link">Dashboard</a>
+                <a href="bookmarks.html" class="nav-link active">Saved</a>
+            </div>
+
+            <div class="nav-auth" id="nav-auth">
+                <a href="login.html" class="btn btn-secondary">Log In</a>
+                <a href="signup.html" class="btn btn-primary">Get Started</a>
+            </div>
+
+            <div class="nav-auth hidden" id="nav-user">
+                <a href="profile.html" class="btn btn-secondary" id="nav-profile-btn">
+                    <span id="nav-user-name">Profile</span>
+                </a>
+                <button class="btn btn-secondary" id="nav-logout-btn">Log Out</button>
+            </div>
+
+            <button class="mobile-menu-btn" aria-label="Toggle menu">
+                <span></span><span></span><span></span>
+            </button>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="section" style="padding-top: 120px;">
+        <div class="container">
+            <div class="flex justify-between items-center mb-lg">
+                <div>
+                    <h1>Saved <span class="gradient-text">Campaigns</span></h1>
+                    <p class="text-secondary">Campaigns you've bookmarked for later</p>
+                </div>
+            </div>
+
+            <div class="grid grid-3" id="bookmarks-grid">
+                <div class="loading" style="grid-column: 1 / -1;">
+                    <div class="spinner"></div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-text">© 2024 FundAI. AI-Powered Crowdfunding Platform.</div>
+                <div class="footer-links">
+                    <a href="privacy.html" class="footer-link">Privacy</a>
+                    <a href="terms.html" class="footer-link">Terms</a>
+                    <a href="contact.html" class="footer-link">Contact</a>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Toast Container -->
+    <div class="toast-container" id="toast-container"></div>
+
+    <script src="js/app.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            updateNavbar();
+
+            const user = auth.getUser();
+            if (!user) {
+                window.location.href = 'login.html';
+                return;
+            }
+
+            const container = document.getElementById('bookmarks-grid');
+
+            try {
+                const data = await api.getUserBookmarks(user.id);
+                const bookmarks = data.bookmarks || [];
+
+                if (bookmarks.length === 0) {
+                    container.innerHTML = `
+                        <div class="empty-state" style="grid-column: 1 / -1;">
+                            <div class="empty-icon">❤️</div>
+                            <h3 class="empty-title">No saved campaigns</h3>
+                            <p class="empty-description">Browse campaigns and click the heart to save them!</p>
+                            <a href="campaigns.html" class="btn btn-primary mt-md">Browse Campaigns</a>
+                        </div>
+                    `;
+                    return;
+                }
+
+                container.innerHTML = bookmarks.map(b => {
+                    const c = b.campaign;
+                    return `
+                        <div class="card campaign-card" data-bookmark-id="${b.id}" data-campaign-id="${c.id}">
+                            <a href="campaign-detail.html?id=${c.id}">
+                                <div class="campaign-image" style="background: linear-gradient(135deg, var(--primary-color), var(--accent-color)); display: flex; align-items: center; justify-content: center;">
+                                    <span style="font-size: 4rem;">${getCategoryEmoji(c.main_category)}</span>
+                                </div>
+                            </a>
+                            <div class="campaign-content">
+                                <div class="flex justify-between items-start">
+                                    <span class="campaign-category">${c.main_category}</span>
+                                    <button class="btn btn-icon btn-secondary bookmark-btn active" data-campaign-id="${c.id}">❤️</button>
+                                </div>
+                                <a href="campaign-detail.html?id=${c.id}">
+                                    <h3 class="campaign-title">${escapeHtml(c.name)}</h3>
+                                </a>
+                                <p class="campaign-blurb">${escapeHtml(c.blurb)}</p>
+                                <div class="progress-bar">
+                                    <div class="progress-fill" style="width: ${c.funding_percentage}%"></div>
+                                </div>
+                                <div class="campaign-meta">
+                                    <span class="campaign-goal">$${formatNumber(c.amount_raised)} / $${formatNumber(c.usd_goal)}</span>
+                                    ${c.ai_score !== null ? `
+                                        <span class="campaign-score ${getScoreClass(c.ai_score)}">
+                                            🎯 ${(c.ai_score * 100).toFixed(0)}%
+                                        </span>
+                                    ` : `<span class="campaign-score">⏳ Pending</span>`}
+                                </div>
+                                <a href="campaign-detail.html?id=${c.id}" class="btn btn-primary btn-block mt-md">View Campaign</a>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+
+                // Handle bookmark removal
+                container.querySelectorAll('.bookmark-btn').forEach(btn => {
+                    btn.addEventListener('click', async (e) => {
+                        e.preventDefault();
+                        const campaignId = btn.dataset.campaignId;
+                        try {
+                            await api.toggleBookmark(user.id, campaignId);
+                            btn.closest('.campaign-card').remove();
+                            showToast('Campaign removed from saved', 'success');
+
+                            // Check if empty
+                            if (container.querySelectorAll('.campaign-card').length === 0) {
+                                container.innerHTML = `
+                                    <div class="empty-state" style="grid-column: 1 / -1;">
+                                        <div class="empty-icon">❤️</div>
+                                        <h3 class="empty-title">No saved campaigns</h3>
+                                        <p class="empty-description">Browse campaigns and click the heart to save them!</p>
+                                        <a href="campaigns.html" class="btn btn-primary mt-md">Browse Campaigns</a>
+                                    </div>
+                                `;
+                            }
+                        } catch (error) {
+                            showToast(error.message, 'error');
+                        }
+                    });
+                });
+
+            } catch (error) {
+                console.error('Error loading bookmarks:', error);
+                container.innerHTML = `
+                    <div class="empty-state" style="grid-column: 1 / -1;">
+                        <p class="text-muted">Unable to load saved campaigns. Please try again.</p>
+                    </div>
+                `;
+            }
+        });
+    </script>
+</body>
+
+</html>

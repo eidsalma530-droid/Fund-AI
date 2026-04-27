@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description"
+        content="FundAI - AI-Powered Crowdfunding Platform. Get your project evaluated by cutting-edge AI to maximize your funding success.">
+    <title>FundAI - AI-Powered Crowdfunding Platform</title>
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="favicon.png">
+    <meta name="theme-color" content="#667eea">
+</head>
+
+<body>
+    <!-- Navbar -->
+    <nav class="navbar" id="navbar">
+        <div class="container">
+            <a href="index.html" class="logo">
+                <div class="logo-icon"><img src="logo.png" alt="FundAI Logo"></div>
+                <span class="gradient-text">FundAI</span>
+            </a>
+
+            <div class="nav-links">
+                <a href="campaigns.html" class="nav-link">Campaigns</a>
+                <a href="#how-it-works" class="nav-link">How it Works</a>
+                <a href="#about" class="nav-link">About</a>
+            </div>
+
+            <div class="nav-auth" id="nav-auth">
+                <a href="login.html" class="btn btn-secondary">Log In</a>
+                <a href="signup.html" class="btn btn-primary">Get Started</a>
+            </div>
+
+            <div class="nav-auth hidden" id="nav-user">
+                <a href="profile.html" class="btn btn-secondary" id="nav-profile-btn">
+                    <span id="nav-user-name">Profile</span>
+                </a>
+                <button class="btn btn-secondary" id="nav-logout-btn">Log Out</button>
+            </div>
+
+            <!-- Mobile Menu Button -->
+            <button class="mobile-menu-btn" aria-label="Toggle menu">
+                <span></span>
+                <span></span>
+                <span></span>
+            </button>
+        </div>
+    </nav>
+
+    <!-- Mobile Menu -->
+    <div class="mobile-menu">
+        <a href="campaigns.html" class="nav-link">Campaigns</a>
+        <a href="#how-it-works" class="nav-link">How it Works</a>
+        <a href="contact.html" class="nav-link">Contact</a>
+        <div class="nav-auth" id="mobile-nav-auth">
+            <a href="login.html" class="btn btn-secondary">Log In</a>
+            <a href="signup.html" class="btn btn-primary">Get Started</a>
+        </div>
+    </div>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="container">
+            <div class="hero-content">
+                <div class="hero-badge">
+                    <span class="hero-badge-dot"></span>
+                    <span>AI-Powered Success Predictions</span>
+                </div>
+
+                <h1>
+                    Fund Your Vision with
+                    <span class="gradient-text">AI Intelligence</span>
+                </h1>
+
+                <p class="hero-description">
+                    Get your crowdfunding campaign evaluated by state-of-the-art machine learning
+                    before you launch. Maximize your success with data-driven insights and
+                    strategic recommendations from Gemini AI.
+                </p>
+
+                <div class="hero-buttons">
+                    <a href="signup.html" class="btn btn-primary btn-lg">
+                        🚀 Start Your Campaign
+                    </a>
+                    <a href="campaigns.html" class="btn btn-secondary btn-lg">
+                        📊 Browse Campaigns
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Floating Cards -->
+        <div class="hero-visual">
+            <div class="floating-card" style="top: 20%; right: 20%; animation-delay: 0s;">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <span style="font-size: 2rem;">📈</span>
+                    <div>
+                        <div style="font-weight: 700; font-size: 1.5rem; color: #10b981;">87%</div>
+                        <div style="color: var(--text-muted); font-size: 0.85rem;">Success Rate</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="floating-card" style="top: 50%; right: 10%; animation-delay: 2s;">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <span style="font-size: 2rem;">🤖</span>
+                    <div>
+                        <div style="font-weight: 700;">AI Analysis</div>
+                        <div style="color: var(--text-muted); font-size: 0.85rem;">Powered by Gemini</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="floating-card" style="bottom: 20%; right: 25%; animation-delay: 4s;">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <span style="font-size: 2rem;">💡</span>
+                    <div>
+                        <div style="font-weight: 700;">Smart Insights</div>
+                        <div style="color: var(--text-muted); font-size: 0.85rem;">Data-driven advice</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Stats Section -->
+    <section class="section">
+        <div class="container">
+            <div class="stats-grid">
+                <div class="stat-card glass-card">
+                    <div class="stat-value">10K+</div>
+                    <div class="stat-label">Campaigns Analyzed</div>
+                </div>
+                <div class="stat-card glass-card">
+                    <div class="stat-value">$2.5M</div>
+                    <div class="stat-label">Funding Secured</div>
+                </div>
+                <div class="stat-card glass-card">
+                    <div class="stat-value">85%</div>
+                    <div class="stat-label">Avg Success Rate</div>
+                </div>
+                <div class="stat-card glass-card">
+                    <div class="stat-value">500+</div>
+                    <div class="stat-label">Happy Creators</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- How It Works Section -->
+    <section class="section" id="how-it-works">
+        <div class="container">
+            <div class="text-center mb-lg">
+                <h2>How It <span class="gradient-text">Works</span></h2>
+                <p class="text-secondary" style="max-width: 600px; margin: var(--space-md) auto;">
+                    Our AI-powered platform helps creators succeed and investors find promising projects.
+                </p>
+            </div>
+
+            <div class="grid grid-3">
+                <div class="card">
+                    <div class="card-header">
+                        <span style="font-size: 3rem;">📝</span>
+                        <h3 class="card-title mt-md">1. Create Your Campaign</h3>
+                    </div>
+                    <p class="card-description">
+                        Sign up as a creator and submit your campaign details including your pitch,
+                        funding goal, category, and duration.
+                    </p>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <span style="font-size: 3rem;">🤖</span>
+                        <h3 class="card-title mt-md">2. Get AI Evaluation</h3>
+                    </div>
+                    <p class="card-description">
+                        Our hybrid AI model (Deep Learning + XGBoost) analyzes your campaign
+                        and predicts its success probability.
+                    </p>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <span style="font-size: 3rem;">💡</span>
+                        <h3 class="card-title mt-md">3. Get Strategic Advice</h3>
+                    </div>
+                    <p class="card-description">
+                        Gemini AI provides personalized recommendations to improve your campaign
+                        and maximize your funding success.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Featured Campaigns Section -->
+    <section class="section">
+        <div class="container">
+            <div class="flex justify-between items-center mb-lg">
+                <h2>Featured <span class="gradient-text">Campaigns</span></h2>
+                <a href="campaigns.html" class="btn btn-secondary">View All →</a>
+            </div>
+
+            <div class="grid grid-3" id="featured-campaigns">
+                <!-- Campaigns loaded dynamically -->
+                <div class="loading">
+                    <div class="spinner"></div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA Section -->
+    <section class="section">
+        <div class="container">
+            <div class="glass-card text-center" style="padding: var(--space-2xl);">
+                <h2>Ready to Launch Your <span class="gradient-text">Vision</span>?</h2>
+                <p class="text-secondary mt-md" style="max-width: 600px; margin: var(--space-md) auto;">
+                    Join thousands of successful creators who used AI-powered insights
+                    to fund their dreams.
+                </p>
+                <div style="margin-top: var(--space-xl);">
+                    <a href="signup.html" class="btn btn-primary btn-lg">🚀 Get Started Free</a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-text">
+                    © 2024 FundAI. AI-Powered Crowdfunding Platform.
+                </div>
+                <div class="footer-links">
+                    <a href="privacy.html" class="footer-link">Privacy Policy</a>
+                    <a href="terms.html" class="footer-link">Terms of Service</a>
+                    <a href="contact.html" class="footer-link">Contact</a>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Toast Container -->
+    <div class="toast-container" id="toast-container"></div>
+
+    <script src="js/app.js"></script>
+    <script>
+        // Load featured campaigns
+        document.addEventListener('DOMContentLoaded', async () => {
+            updateNavbar();
+
+            const container = document.getElementById('featured-campaigns');
+
+            try {
+                const campaigns = await api.getCampaigns();
+                const featured = campaigns.slice(0, 3);
+
+                if (featured.length === 0) {
+                    container.innerHTML = `
+                        <div class="empty-state" style="grid-column: 1 / -1;">
+                            <div class="empty-icon">📭</div>
+                            <h3 class="empty-title">No Campaigns Yet</h3>
+                            <p class="empty-description">Be the first to create a campaign!</p>
+                            <a href="signup.html" class="btn btn-primary">Create Campaign</a>
+                        </div>
+                    `;
+                    return;
+                }
+
+                container.innerHTML = featured.map(campaign => `
+                    <a href="campaign-detail.html?id=${campaign.id}" class="card campaign-card">
+                        <div class="campaign-image" style="background: linear-gradient(135deg, var(--primary-color), var(--accent-color)); display: flex; align-items: center; justify-content: center;">
+                            <span style="font-size: 4rem;">${getCategoryEmoji(campaign.main_category)}</span>
+                        </div>
+                        <div class="campaign-content">
+                            <span class="campaign-category">${campaign.main_category}</span>
+                            <h3 class="campaign-title">${escapeHtml(campaign.name)}</h3>
+                            <p class="campaign-blurb">${escapeHtml(campaign.blurb)}</p>
+                            <div class="campaign-meta">
+                                <span class="campaign-goal">$${formatNumber(campaign.usd_goal)}</span>
+                                ${campaign.ai_score !== null ? `
+                                    <span class="campaign-score ${getScoreClass(campaign.ai_score)}">
+                                        🎯 ${(campaign.ai_score * 100).toFixed(0)}%
+                                    </span>
+                                ` : `
+                                    <span class="campaign-score">⏳ Pending</span>
+                                `}
+                            </div>
+                        </div>
+                    </a>
+                `).join('');
+
+            } catch (error) {
+                container.innerHTML = `
+                    <div class="empty-state" style="grid-column: 1 / -1;">
+                        <p class="text-muted">Unable to load campaigns. Server may be starting up.</p>
+                    </div>
+                `;
+            }
+        });
+
+        // Navbar scroll effect
+        window.addEventListener('scroll', () => {
+            document.getElementById('navbar').classList.toggle('scrolled', window.scrollY > 50);
+        });
+    </script>
+</body>
+
+</html>

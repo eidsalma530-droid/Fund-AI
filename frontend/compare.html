@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Compare crowdfunding campaigns side by side with AI predictions.">
+    <title>Compare Campaigns - FundAI</title>
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+
+<body>
+    <!-- Navbar -->
+    <nav class="navbar" id="navbar">
+        <div class="container">
+            <a href="index.html" class="logo">
+                <div class="logo-icon"><img src="logo.png" alt="FundAI Logo"></div>
+                <span class="gradient-text">FundAI</span>
+            </a>
+
+            <div class="nav-links">
+                <a href="campaigns.html" class="nav-link">Campaigns</a>
+                <a href="compare.html" class="nav-link" style="color: var(--primary-light);">Compare</a>
+            </div>
+
+            <div class="nav-auth" id="nav-auth">
+                <a href="login.html" class="btn btn-secondary">Log In</a>
+                <a href="signup.html" class="btn btn-primary">Get Started</a>
+            </div>
+
+            <div class="nav-auth hidden" id="nav-user">
+                <a href="profile.html" class="btn btn-secondary" id="nav-profile-btn">Profile</a>
+                <button class="btn btn-secondary" id="nav-logout-btn">Log Out</button>
+            </div>
+        </div>
+    </nav>
+
+    <main style="padding-top: 120px; min-height: 100vh;">
+        <div class="container">
+            <!-- Header -->
+            <div class="text-center mb-lg">
+                <span style="font-size: 4rem;">⚖️</span>
+                <h1 style="margin-top: var(--space-md);">Compare <span class="gradient-text">Campaigns</span></h1>
+                <p class="text-secondary" style="max-width: 600px; margin: var(--space-md) auto;">
+                    Select campaigns to compare their metrics, AI scores, and funding progress side by side.
+                </p>
+            </div>
+
+            <!-- Campaign Selection -->
+            <div class="glass-card mb-lg">
+                <h3 class="mb-md">Select Campaigns to Compare</h3>
+                <div class="grid grid-2">
+                    <div class="form-group">
+                        <label class="form-label">Campaign 1</label>
+                        <select class="form-input form-select" id="campaign1-select">
+                            <option value="">Choose a campaign...</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Campaign 2</label>
+                        <select class="form-input form-select" id="campaign2-select">
+                            <option value="">Choose a campaign...</option>
+                        </select>
+                    </div>
+                </div>
+                <button class="btn btn-primary btn-lg" onclick="compareCampaigns()">🔍 Compare</button>
+            </div>
+
+            <!-- Comparison Results -->
+            <div id="comparison-results" class="hidden">
+                <div class="compare-grid" id="compare-grid">
+                    <!-- Will be populated dynamically -->
+                </div>
+            </div>
+
+            <!-- Empty State -->
+            <div class="empty-state" id="empty-state">
+                <div class="empty-icon">📊</div>
+                <h3 class="empty-title">Select Two Campaigns</h3>
+                <p class="empty-description">Choose campaigns from the dropdowns above to see a detailed comparison.</p>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer" style="margin-top: var(--space-2xl);">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-text">
+                    © 2024 FundAI. AI-Powered Crowdfunding Platform.
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Toast Container -->
+    <div class="toast-container" id="toast-container"></div>
+
+    <script src="js/app.js"></script>
+    <script>
+        let campaigns = [];
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            updateNavbar();
+            await loadCampaigns();
+        });
+
+        async function loadCampaigns() {
+            try {
+                campaigns = await api.getCampaigns();
+
+                const select1 = document.getElementById('campaign1-select');
+                const select2 = document.getElementById('campaign2-select');
+
+                campaigns.forEach(campaign => {
+                    const option1 = new Option(`${campaign.name} (${campaign.main_category})`, campaign.id);
+                    const option2 = new Option(`${campaign.name} (${campaign.main_category})`, campaign.id);
+                    select1.add(option1);
+                    select2.add(option2);
+                });
+            } catch (error) {
+                showToast('Failed to load campaigns', 'error');
+            }
+        }
+
+        function compareCampaigns() {
+            const id1 = document.getElementById('campaign1-select').value;
+            const id2 = document.getElementById('campaign2-select').value;
+
+            if (!id1 || !id2) {
+                showToast('Please select two campaigns to compare', 'warning');
+                return;
+            }
+
+            if (id1 === id2) {
+                showToast('Please select two different campaigns', 'warning');
+                return;
+            }
+
+            const campaign1 = campaigns.find(c => c.id == id1);
+            const campaign2 = campaigns.find(c => c.id == id2);
+
+            renderComparison(campaign1, campaign2);
+        }
+
+        function renderComparison(c1, c2) {
+            document.getElementById('empty-state').classList.add('hidden');
+            document.getElementById('comparison-results').classList.remove('hidden');
+
+            const grid = document.getElementById('compare-grid');
+            grid.innerHTML = `
+                ${renderCompareCard(c1)}
+                ${renderCompareCard(c2)}
+            `;
+        }
+
+        function renderCompareCard(campaign) {
+            const scoreClass = campaign.ai_score >= 0.7 ? 'success' : campaign.ai_score >= 0.5 ? 'warning' : 'error';
+            const score = campaign.ai_score !== null ? `${(campaign.ai_score * 100).toFixed(0)}%` : 'N/A';
+
+            return `
+                <div class="compare-card">
+                    <div class="compare-header">
+                        <span style="font-size: 2rem;">${getCategoryEmoji(campaign.main_category)}</span>
+                        <h3 style="margin-top: var(--space-sm);">${escapeHtml(campaign.name)}</h3>
+                        <span class="campaign-category">${campaign.main_category}</span>
+                    </div>
+                    <div class="compare-body">
+                        <div class="compare-row">
+                            <span class="compare-label">AI Score</span>
+                            <span class="compare-value" style="color: var(--${scoreClass}-color);">${score}</span>
+                        </div>
+                        <div class="compare-row">
+                            <span class="compare-label">Goal</span>
+                            <span class="compare-value">$${formatNumber(campaign.usd_goal)}</span>
+                        </div>
+                        <div class="compare-row">
+                            <span class="compare-label">Raised</span>
+                            <span class="compare-value">$${formatNumber(campaign.amount_raised || 0)}</span>
+                        </div>
+                        <div class="compare-row">
+                            <span class="compare-label">Funded</span>
+                            <span class="compare-value">${(campaign.funding_percentage || 0).toFixed(1)}%</span>
+                        </div>
+                        <div class="compare-row">
+                            <span class="compare-label">Backers</span>
+                            <span class="compare-value">${campaign.backers_count || 0}</span>
+                        </div>
+                        <div class="compare-row">
+                            <span class="compare-label">Duration</span>
+                            <span class="compare-value">${campaign.duration_days} days</span>
+                        </div>
+                        <div class="compare-row">
+                            <span class="compare-label">Country</span>
+                            <span class="compare-value">${campaign.country}</span>
+                        </div>
+                        <div class="compare-row">
+                            <span class="compare-label">Has Video</span>
+                            <span class="compare-value">${campaign.has_video ? '✅ Yes' : '❌ No'}</span>
+                        </div>
+                        <a href="campaign-detail.html?id=${campaign.id}" class="btn btn-primary w-full mt-lg">
+                            View Campaign
+                        </a>
+                    </div>
+                </div>
+            `;
+        }
+    </script>
+</body>
+
+</html>
