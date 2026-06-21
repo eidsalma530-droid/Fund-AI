@@ -118,7 +118,7 @@ const Signup = () => {
             const result = await signInWithPopup(auth, googleProvider);
             const idToken = await result.user.getIdToken();
             
-            const data = await authAPI.firebaseLogin(idToken);
+            const data = await authAPI.firebaseLogin(idToken, formData.role);
             login(data.user, data.token);
             
             toast.success('Account linked successfully! 🚀');

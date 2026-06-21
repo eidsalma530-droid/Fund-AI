@@ -1,9 +1,11 @@
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { FiZap, FiGithub, FiTwitter, FiLinkedin, FiHeart } from 'react-icons/fi';
+import useAuthStore from '../store/authStore';
 
 const Footer = () => {
     const currentYear = new Date().getFullYear();
+    const user = useAuthStore((state) => state.user);
 
     const footerLinks = [
         {
@@ -11,7 +13,7 @@ const Footer = () => {
             links: [
                 { label: 'Browse Campaigns', to: '/campaigns' },
                 { label: 'Categories', to: '/categories' },
-                { label: 'Create Campaign', to: '/create' },
+                ...(user?.role === 'creator' ? [{ label: 'Create Campaign', to: '/create' }] : []),
             ],
         },
         {

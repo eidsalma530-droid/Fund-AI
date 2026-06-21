@@ -2,8 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Link, useNavigate } from 'react-router-dom';
 import useAuthStore from '../store/authStore';
-import { FiMenu, FiX, FiUser, FiLogOut, FiHome, FiGrid, FiPlusCircle, FiMessageSquare, FiBell, FiSearch, FiBookmark, FiSettings } from 'react-icons/fi';
-import { notificationsAPI, searchAPI, SERVER_BASE } from '../services/api';
+import { FiMenu, FiX, FiUser, FiLogOut, FiHome, FiGrid, FiPlusCircle, FiMessageSquare, FiBell, FiSearch, FiBookmark, FiLayout } from 'react-icons/fi';
+import { notificationsAPI, messagesAPI, searchAPI, SERVER_BASE } from '../services/api';
 
 const Navbar = () => {
     const { user, isAuthenticated, logout } = useAuthStore();
@@ -13,18 +13,36 @@ const Navbar = () => {
     const [showSearch, setShowSearch] = useState(false);
     const [notifications, setNotifications] = useState([]);
     const [unreadCount, setUnreadCount] = useState(0);
+    const [unreadMessageCount, setUnreadMessageCount] = useState(0);
     const [searchQuery, setSearchQuery] = useState('');
     const [searchResults, setSearchResults] = useState([]);
     const [searching, setSearching] = useState(false);
+    const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
     const searchRef = useRef(null);
     const notifRef = useRef(null);
 
     useEffect(() => {
         if (isAuthenticated && user?.id) {
             fetchNotifications();
-            // Poll notifications every 30 seconds
-            const interval = setInterval(fetchNotifications, 30000);
-            return () => clearInterval(interval);
+            fetchUnreadMessageCount();
+            const interval = setInterval(() => {
+                fetchNotifications();
+                fetchUnreadMessageCount();
+            }, 30000);
+            const handleFocus = () => {
+                fetchNotifications();
+                fetchUnreadMessageCount();
+            };
+            const handleMessagesUpdated = (e) => {
+                setUnreadMessageCount(e.detail?.unread_count ?? 0);
+            };
+            window.addEventListener('focus', handleFocus);
+            window.addEventListener('fundai-messages-updated', handleMessagesUpdated);
+            return () => {
+                clearInterval(interval);
+                window.removeEventListener('focus', handleFocus);
+                window.removeEventListener('fundai-messages-updated', handleMessagesUpdated);
+            };
         }
     }, [isAuthenticated, user]);
 
@@ -48,6 +66,15 @@ const Navbar = () => {
             setUnreadCount(data.unread_count || 0);
         } catch (error) {
             console.error('Failed to fetch notifications:', error);
+        }
+    };
+
+    const fetchUnreadMessageCount = async () => {
+        try {
+            const data = await messagesAPI.getAll(user.id);
+            setUnreadMessageCount(data.unread_count || 0);
+        } catch (error) {
+            console.error('Failed to fetch unread message count:', error);
         }
     };
 
@@ -85,6 +112,17 @@ const Navbar = () => {
             setShowSearch(false);
             setSearchQuery('');
         }
+    };
+
+    const handleLogoutClick = () => {
+        setShowLogoutConfirm(true);
+        setIsOpen(false);
+    };
+
+    const handleConfirmLogout = () => {
+        setShowLogoutConfirm(false);
+        logout();
+        navigate('/', { replace: true });
     };
 
     return (
@@ -168,36 +206,37 @@ const Navbar = () => {
                         </form>
                     </div>
 
-                    {/* Desktop Nav */}
-                    <div className="hidden md:flex items-center gap-4">
-                        <NavLink to="/campaigns" icon={<FiGrid />}>Campaigns</NavLink>
-                        <NavLink to="/categories" icon={<FiHome />}>Categories</NavLink>
-                        {isAuthenticated && (
-                            <>
+                    {/* Desktop Nav + Right Actions */}
+                    <div className="hidden md:flex items-center gap-6 shrink-0">
+                        <div className="flex items-center gap-4">
+                            <NavLink to="/campaigns" icon={<FiGrid />}>Campaigns</NavLink>
+                            <NavLink to="/categories" icon={<FiHome />}>Categories</NavLink>
+                            {isAuthenticated && user?.role === 'creator' && (
                                 <NavLink to="/create" icon={<FiPlusCircle />}>Create</NavLink>
-                            </>
-                        )}
-                    </div>
+                            )}
+                        </div>
 
-                    {/* Right Side Actions */}
-                    <div className="hidden md:flex items-center gap-3">
+                        <div className="flex items-center gap-3 pl-6 border-l border-white/10">
                         {isAuthenticated ? (
                             <>
                                 {/* Notifications */}
                                 <div className="relative" ref={notifRef}>
-                                    <motion.button
-                                        onClick={() => setShowNotifications(!showNotifications)}
-                                        className="relative p-2 rounded-xl bg-white/10 hover:bg-white/20 transition-colors"
-                                        whileHover={{ scale: 1.05 }}
-                                        whileTap={{ scale: 0.95 }}
-                                    >
-                                        <FiBell />
-                                        {unreadCount > 0 && (
-                                            <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full text-xs flex items-center justify-center">
-                                                {unreadCount > 9 ? '9+' : unreadCount}
-                                            </span>
-                                        )}
-                                    </motion.button>
+                                    <NavIconTooltip label="Notifications">
+                                        <motion.button
+                                            onClick={() => setShowNotifications(!showNotifications)}
+                                            className="relative p-2 rounded-xl bg-white/10 hover:bg-white/20 transition-colors"
+                                            whileHover={{ scale: 1.05 }}
+                                            whileTap={{ scale: 0.95 }}
+                                            aria-label="Notifications"
+                                        >
+                                            <FiBell />
+                                            {unreadCount > 0 && (
+                                                <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full text-xs flex items-center justify-center">
+                                                    {unreadCount > 9 ? '9+' : unreadCount}
+                                                </span>
+                                            )}
+                                        </motion.button>
+                                    </NavIconTooltip>
 
                                     {/* Notifications Dropdown */}
                                     <AnimatePresence>
@@ -247,64 +286,80 @@ const Navbar = () => {
                                 </div>
 
                                 {/* Messages */}
-                                <Link to="/messages">
-                                    <motion.button
-                                        className="p-2 rounded-xl bg-white/10 hover:bg-white/20 transition-colors"
-                                        whileHover={{ scale: 1.05 }}
-                                        whileTap={{ scale: 0.95 }}
-                                    >
-                                        <FiMessageSquare />
-                                    </motion.button>
-                                </Link>
+                                <NavIconTooltip label="Messages">
+                                    <Link to="/messages" aria-label="Messages" onClick={fetchUnreadMessageCount}>
+                                        <motion.button
+                                            className="relative p-2 rounded-xl bg-white/10 hover:bg-white/20 transition-colors"
+                                            whileHover={{ scale: 1.05 }}
+                                            whileTap={{ scale: 0.95 }}
+                                        >
+                                            <FiMessageSquare />
+                                            {unreadMessageCount > 0 && (
+                                                <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full text-xs flex items-center justify-center">
+                                                    {unreadMessageCount > 9 ? '9+' : unreadMessageCount}
+                                                </span>
+                                            )}
+                                        </motion.button>
+                                    </Link>
+                                </NavIconTooltip>
 
                                 {/* Bookmarks */}
-                                <Link to="/bookmarks">
-                                    <motion.button
-                                        className="p-2 rounded-xl bg-white/10 hover:bg-white/20 transition-colors"
-                                        whileHover={{ scale: 1.05 }}
-                                        whileTap={{ scale: 0.95 }}
-                                    >
-                                        <FiBookmark />
-                                    </motion.button>
-                                </Link>
+                                <NavIconTooltip label="Saved">
+                                    <Link to="/bookmarks" aria-label="Saved">
+                                        <motion.button
+                                            className="p-2 rounded-xl bg-white/10 hover:bg-white/20 transition-colors"
+                                            whileHover={{ scale: 1.05 }}
+                                            whileTap={{ scale: 0.95 }}
+                                        >
+                                            <FiBookmark />
+                                        </motion.button>
+                                    </Link>
+                                </NavIconTooltip>
 
                                 {/* Dashboard */}
-                                <Link to="/dashboard">
-                                    <motion.button
-                                        className="p-2 rounded-xl bg-white/10 hover:bg-white/20 transition-colors"
-                                        whileHover={{ scale: 1.05 }}
-                                        whileTap={{ scale: 0.95 }}
-                                    >
-                                        <FiSettings />
-                                    </motion.button>
-                                </Link>
+                                <NavIconTooltip label="Dashboard">
+                                    <Link to="/dashboard" aria-label="Dashboard">
+                                        <motion.button
+                                            className="p-2 rounded-xl bg-white/10 hover:bg-white/20 transition-colors"
+                                            whileHover={{ scale: 1.05 }}
+                                            whileTap={{ scale: 0.95 }}
+                                        >
+                                            <FiLayout />
+                                        </motion.button>
+                                    </Link>
+                                </NavIconTooltip>
 
                                 {/* Profile */}
-                                <Link to="/profile">
-                                    <motion.div
-                                        className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 transition-colors"
+                                <NavIconTooltip label="Profile">
+                                    <Link to="/profile" aria-label="Profile">
+                                        <motion.div
+                                            className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 transition-colors"
+                                            whileHover={{ scale: 1.05 }}
+                                            whileTap={{ scale: 0.95 }}
+                                        >
+                                            <div className="w-6 h-6 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-xs overflow-hidden">
+                                                {user?.avatar ? (
+                                                    <img src={`${SERVER_BASE}/uploads/avatars/${user.avatar}`} alt="" className="w-full h-full object-cover" />
+                                                ) : (
+                                                    user?.name?.[0] || <FiUser />
+                                                )}
+                                            </div>
+                                            <span className="hidden lg:inline">{user?.name?.split(' ')[0] || 'Profile'}</span>
+                                        </motion.div>
+                                    </Link>
+                                </NavIconTooltip>
+
+                                <NavIconTooltip label="Log Out">
+                                    <motion.button
+                                        onClick={handleLogoutClick}
+                                        className="p-2 rounded-xl text-red-400 hover:bg-red-500/20 transition-colors"
                                         whileHover={{ scale: 1.05 }}
                                         whileTap={{ scale: 0.95 }}
+                                        aria-label="Log Out"
                                     >
-                                        <div className="w-6 h-6 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-xs overflow-hidden">
-                                            {user?.avatar ? (
-                                                <img src={`${SERVER_BASE}/uploads/avatars/${user.avatar}`} alt="" className="w-full h-full object-cover" />
-                                            ) : (
-                                                user?.name?.[0] || <FiUser />
-                                            )}
-                                        </div>
-                                        <span className="hidden lg:inline">{user?.name?.split(' ')[0] || 'Profile'}</span>
-                                    </motion.div>
-                                </Link>
-
-                                <motion.button
-                                    onClick={logout}
-                                    className="p-2 rounded-xl text-red-400 hover:bg-red-500/20 transition-colors"
-                                    whileHover={{ scale: 1.05 }}
-                                    whileTap={{ scale: 0.95 }}
-                                >
-                                    <FiLogOut />
-                                </motion.button>
+                                        <FiLogOut />
+                                    </motion.button>
+                                </NavIconTooltip>
                             </>
                         ) : (
                             <>
@@ -328,6 +383,7 @@ const Navbar = () => {
                                 </Link>
                             </>
                         )}
+                        </div>
                     </div>
 
                     {/* Mobile Menu Button */}
@@ -366,15 +422,26 @@ const Navbar = () => {
                                 <MobileNavLink to="/categories" onClick={() => setIsOpen(false)}>Categories</MobileNavLink>
                                 {isAuthenticated ? (
                                     <>
-                                        <MobileNavLink to="/create" onClick={() => setIsOpen(false)}>Create Campaign</MobileNavLink>
+                                        {user?.role === 'creator' && (
+                                            <MobileNavLink to="/create" onClick={() => setIsOpen(false)}>Create Campaign</MobileNavLink>
+                                        )}
                                         <MobileNavLink to="/dashboard" onClick={() => setIsOpen(false)}>Dashboard</MobileNavLink>
-                                        <MobileNavLink to="/messages" onClick={() => setIsOpen(false)}>Messages</MobileNavLink>
+                                        <MobileNavLink to="/messages" onClick={() => { setIsOpen(false); fetchUnreadMessageCount(); }}>
+                                            <span className="flex items-center gap-2">
+                                                Messages
+                                                {unreadMessageCount > 0 && (
+                                                    <span className="min-w-5 h-5 px-1 bg-red-500 rounded-full text-xs flex items-center justify-center">
+                                                        {unreadMessageCount > 9 ? '9+' : unreadMessageCount}
+                                                    </span>
+                                                )}
+                                            </span>
+                                        </MobileNavLink>
                                         <MobileNavLink to="/bookmarks" onClick={() => setIsOpen(false)}>Saved Campaigns</MobileNavLink>
                                         <MobileNavLink to="/profile" onClick={() => setIsOpen(false)}>My Profile</MobileNavLink>
                                         {user?.is_admin && (
                                             <MobileNavLink to="/admin" onClick={() => setIsOpen(false)}>Admin Panel</MobileNavLink>
                                         )}
-                                        <button onClick={() => { logout(); setIsOpen(false); }} className="text-red-400 text-left py-2">
+                                        <button onClick={handleLogoutClick} className="text-red-400 text-left py-2">
                                             Log Out
                                         </button>
                                     </>
@@ -389,9 +456,66 @@ const Navbar = () => {
                     )}
                 </AnimatePresence>
             </div>
+
+            {/* Logout Confirmation Modal */}
+            <AnimatePresence>
+                {showLogoutConfirm && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] p-6"
+                        onClick={() => setShowLogoutConfirm(false)}
+                    >
+                        <motion.div
+                            initial={{ scale: 0.9, y: 50 }}
+                            animate={{ scale: 1, y: 0 }}
+                            exit={{ scale: 0.9, y: 50 }}
+                            className="glass-card p-8 max-w-md w-full text-center"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <div className="w-16 h-16 mx-auto mb-5 rounded-2xl bg-red-500/15 border border-red-500/30 flex items-center justify-center">
+                                <FiLogOut className="text-3xl text-red-400" />
+                            </div>
+                            <h2 className="text-2xl font-bold mb-2">Log Out</h2>
+                            <p className="text-white/60 mb-8">Are you sure you want to log out?</p>
+                            <div className="flex gap-3">
+                                <motion.button
+                                    whileHover={{ scale: 1.02 }}
+                                    whileTap={{ scale: 0.98 }}
+                                    onClick={() => setShowLogoutConfirm(false)}
+                                    className="btn-secondary flex-1"
+                                >
+                                    Cancel
+                                </motion.button>
+                                <motion.button
+                                    whileHover={{ scale: 1.02 }}
+                                    whileTap={{ scale: 0.98 }}
+                                    onClick={handleConfirmLogout}
+                                    className="flex-1 px-6 py-3 rounded-xl font-semibold bg-red-500 hover:bg-red-600 text-white transition-colors"
+                                >
+                                    Log Out
+                                </motion.button>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </motion.nav>
     );
 };
+
+const NavIconTooltip = ({ label, children }) => (
+    <div className="relative group">
+        {children}
+        <span
+            role="tooltip"
+            className="pointer-events-none absolute bottom-[calc(100%+8px)] left-1/2 -translate-x-1/2 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-white/90 bg-[#12122a] border border-white/15 shadow-[0_8px_24px_rgba(0,0,0,0.45)] opacity-0 scale-95 group-hover:opacity-100 group-hover:scale-100 group-focus-within:opacity-100 group-focus-within:scale-100 transition-all duration-200 whitespace-nowrap z-[60]"
+        >
+            {label}
+        </span>
+    </div>
+);
 
 const NavLink = ({ to, children, icon }) => (
     <Link to={to}>

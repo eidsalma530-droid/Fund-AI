@@ -16,7 +16,7 @@ const useAuthStore = create(
             },
 
             logout: () => {
-                set({ user: null, token: null, isAuthenticated: false, sessionVerified: false });
+                set({ user: null, token: null, isAuthenticated: false, sessionVerified: true });
             },
 
             updateUser: (updates) => {

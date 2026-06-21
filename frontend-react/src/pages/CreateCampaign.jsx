@@ -5,6 +5,8 @@ import { FiCheck, FiEdit, FiZap, FiArrowRight, FiRefreshCw, FiUpload, FiPlus, Fi
 import { campaignsAPI, getCategories, getCountries, rewardsAPI } from '../services/api';
 import useAuthStore from '../store/authStore';
 import toast from 'react-hot-toast';
+import DeliveryDatePicker, { formatDeliveryDisplay } from '../components/DeliveryDatePicker';
+import AIEvaluationReport from '../components/AIEvaluationReport';
 
 const API_BASE = import.meta.env.VITE_SERVER_URL || 'http://localhost:5000';
 
@@ -490,7 +492,7 @@ const CreateCampaign = () => {
                                                     </div>
                                                     <div className="text-left">
                                                         <p className="font-medium text-sm">{formData.has_video ? 'Video Included' : 'No Video'}</p>
-                                                        <p className="text-xs text-white/40">Campaigns with video are 85% more likely to succeed</p>
+                                                        <p className="text-xs text-white/40">Campaigns with video are 15% more likely to succeed</p>
                                                     </div>
                                                 </div>
                                                 {/* Toggle Switch */}
@@ -590,11 +592,10 @@ const CreateCampaign = () => {
                                     </div>
                                     <div>
                                         <label className="block text-sm font-medium mb-2">Estimated Delivery</label>
-                                        <input
-                                            type="month"
+                                        <DeliveryDatePicker
                                             value={newReward.estimated_delivery}
-                                            onChange={(e) => setNewReward({ ...newReward, estimated_delivery: e.target.value })}
-                                            className="input-field"
+                                            onChange={(estimated_delivery) => setNewReward({ ...newReward, estimated_delivery })}
+                                            placeholder="Choose delivery date or month"
                                         />
                                     </div>
                                     <motion.button
@@ -629,6 +630,12 @@ const CreateCampaign = () => {
                                                     </div>
                                                     {reward.description && (
                                                         <p className="text-sm text-white/60 mt-1">{reward.description}</p>
+                                                    )}
+                                                    {reward.estimated_delivery && (
+                                                        <p className="text-xs text-primary/80 mt-1 flex items-center gap-1">
+                                                            <FiCalendar size={12} />
+                                                            Delivery: {formatDeliveryDisplay(reward.estimated_delivery)}
+                                                        </p>
                                                     )}
                                                 </div>
                                                 <motion.button
@@ -679,145 +686,7 @@ const CreateCampaign = () => {
                             exit={{ opacity: 0, x: -50 }}
                             className="max-w-4xl mx-auto"
                         >
-                            <div className="text-center mb-8">
-                                <h1 className="text-4xl font-bold mb-4">
-                                    AI Valuation <span className="gradient-text">Report</span> 🤖
-                                </h1>
-                                <p className="text-white/60">Comprehensive analysis from our AI models & Gemini Valuator</p>
-                            </div>
-
-                            {/* Three Score Cards */}
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-                                {/* Deep Learning Score */}
-                                <motion.div
-                                    initial={{ scale: 0.8, opacity: 0 }}
-                                    animate={{ scale: 1, opacity: 1 }}
-                                    transition={{ delay: 0.1 }}
-                                    className="glass-card p-6 text-center border border-purple-500/30"
-                                >
-                                    <div className="text-3xl mb-2">🧠</div>
-                                    <h3 className="text-sm font-semibold text-purple-400 mb-1">Deep Learning</h3>
-                                    <p className="text-xs text-white/40 mb-3">NLP & Text Analysis</p>
-                                    <div className="text-4xl font-bold mb-2">
-                                        <span className={`${(aiResult.dl_score || 0) >= 70 ? 'text-green-400' :
-                                                (aiResult.dl_score || 0) >= 40 ? 'text-yellow-400' : 'text-red-400'
-                                            }`}>{aiResult.dl_score?.toFixed(1) || '—'}</span>
-                                        <span className="text-white/30 text-lg">%</span>
-                                    </div>
-                                    <div className="h-2 bg-white/10 rounded-full overflow-hidden">
-                                        <motion.div
-                                            initial={{ width: 0 }}
-                                            animate={{ width: `${aiResult.dl_score || 0}%` }}
-                                            transition={{ delay: 0.5, duration: 1.2 }}
-                                            className="h-full rounded-full bg-gradient-to-r from-purple-500 to-purple-400"
-                                        />
-                                    </div>
-                                </motion.div>
-
-                                {/* XGBoost Score */}
-                                <motion.div
-                                    initial={{ scale: 0.8, opacity: 0 }}
-                                    animate={{ scale: 1, opacity: 1 }}
-                                    transition={{ delay: 0.2 }}
-                                    className="glass-card p-6 text-center border border-blue-500/30"
-                                >
-                                    <div className="text-3xl mb-2">📊</div>
-                                    <h3 className="text-sm font-semibold text-blue-400 mb-1">XGBoost</h3>
-                                    <p className="text-xs text-white/40 mb-3">Numerical Features</p>
-                                    <div className="text-4xl font-bold mb-2">
-                                        <span className={`${(aiResult.xgb_score || 0) >= 70 ? 'text-green-400' :
-                                                (aiResult.xgb_score || 0) >= 40 ? 'text-yellow-400' : 'text-red-400'
-                                            }`}>{aiResult.xgb_score?.toFixed(1) || '—'}</span>
-                                        <span className="text-white/30 text-lg">%</span>
-                                    </div>
-                                    <div className="h-2 bg-white/10 rounded-full overflow-hidden">
-                                        <motion.div
-                                            initial={{ width: 0 }}
-                                            animate={{ width: `${aiResult.xgb_score || 0}%` }}
-                                            transition={{ delay: 0.7, duration: 1.2 }}
-                                            className="h-full rounded-full bg-gradient-to-r from-blue-500 to-cyan-400"
-                                        />
-                                    </div>
-                                </motion.div>
-
-                                {/* Final Ensemble Score */}
-                                <motion.div
-                                    initial={{ scale: 0.8, opacity: 0 }}
-                                    animate={{ scale: 1, opacity: 1 }}
-                                    transition={{ delay: 0.3 }}
-                                    className="glass-card p-6 text-center border border-emerald-500/30 relative overflow-hidden"
-                                >
-                                    <div className="absolute top-2 right-2 text-xs bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full font-bold">FINAL</div>
-                                    <div className="text-3xl mb-2">🎯</div>
-                                    <h3 className="text-sm font-semibold text-emerald-400 mb-1">Meta Ensemble</h3>
-                                    <p className="text-xs text-white/40 mb-3">Combined Prediction</p>
-                                    <div className="text-5xl font-bold mb-2">
-                                        <span className={`${aiResult.score >= 70 ? 'text-green-400' :
-                                                aiResult.score >= 40 ? 'text-yellow-400' : 'text-red-400'
-                                            }`}>{aiResult.score}</span>
-                                        <span className="text-white/30 text-xl">/100</span>
-                                    </div>
-                                    <div className="h-3 bg-white/10 rounded-full overflow-hidden">
-                                        <motion.div
-                                            initial={{ width: 0 }}
-                                            animate={{ width: `${aiResult.score}%` }}
-                                            transition={{ delay: 0.9, duration: 1.5 }}
-                                            className={`h-full rounded-full ${aiResult.score >= 70 ? 'bg-gradient-to-r from-green-500 to-emerald-400' :
-                                                aiResult.score >= 40 ? 'bg-gradient-to-r from-yellow-500 to-orange-400' :
-                                                'bg-gradient-to-r from-red-500 to-pink-400'}`}
-                                        />
-                                    </div>
-                                    <p className="text-xs mt-2 text-white/50">
-                                        {aiResult.score >= 70 ? '🎉 High chance of success' :
-                                            aiResult.score >= 40 ? '💡 Moderate — review recommendations' :
-                                                '⚠️ Needs significant improvement'}
-                                    </p>
-                                </motion.div>
-                            </div>
-
-                            {/* Score Explanation */}
-                            <motion.div
-                                initial={{ opacity: 0, y: 20 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                transition={{ delay: 0.4 }}
-                                className="glass-card p-4 mb-8 flex items-start gap-3 border border-white/10"
-                            >
-                                <span className="text-2xl mt-0.5">ℹ️</span>
-                                <div className="text-sm text-white/60">
-                                    <strong className="text-white/80">How scores work:</strong> The Deep Learning model (🧠) analyzes your text and pitch quality using NLP trained on 200K+ campaigns. 
-                                    The XGBoost model (📊) evaluates structural factors like goal, duration, category, and video. 
-                                    The Meta Ensemble (🎯) combines both for the final prediction.
-                                </div>
-                            </motion.div>
-
-                            {/* Gemini Valuator Report — BIG */}
-                            <motion.div
-                                initial={{ opacity: 0, y: 30 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                transition={{ delay: 0.5 }}
-                                className="glass-card p-8 md:p-10 mb-8 border border-primary/20"
-                            >
-                                <div className="flex items-center gap-3 mb-6 pb-4 border-b border-white/10">
-                                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-2xl">
-                                        💎
-                                    </div>
-                                    <div>
-                                        <h3 className="text-xl font-bold">Gemini AI Valuator Report</h3>
-                                        <p className="text-sm text-white/50">Powered by Google Gemini — Senior Kickstarter Project Analysis</p>
-                                    </div>
-                                </div>
-                                <div className="prose prose-invert max-w-none">
-                                    <div className="text-white/85 leading-relaxed text-[15px] whitespace-pre-line 
-                                        [&_h2]:text-xl [&_h2]:font-bold [&_h2]:mt-8 [&_h2]:mb-4 [&_h2]:text-white [&_h2]:border-b [&_h2]:border-white/10 [&_h2]:pb-2
-                                        [&_h3]:text-lg [&_h3]:font-semibold [&_h3]:mt-6 [&_h3]:mb-3 [&_h3]:text-white/90
-                                        [&_strong]:text-white [&_strong]:font-semibold
-                                        [&_li]:ml-4
-                                        [&_ul]:space-y-1
-                                    ">
-                                        {aiResult.advice}
-                                    </div>
-                                </div>
-                            </motion.div>
+                            <AIEvaluationReport aiResult={aiResult} showPageHeader />
 
                             {/* Quick Edit */}
                             <motion.div 

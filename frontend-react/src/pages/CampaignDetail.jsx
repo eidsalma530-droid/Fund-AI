@@ -101,6 +101,14 @@ const CampaignDetail = () => {
             toast.error('Please login to invest');
             return;
         }
+        if (user?.role === 'creator') {
+            toast.error('Creator accounts cannot back campaigns. Switch to investor mode first.');
+            return;
+        }
+        if (user?.id && campaign?.creator_id === user.id) {
+            toast.error('You cannot back your own campaigns');
+            return;
+        }
         if (!investAmount || parseFloat(investAmount) <= 0) {
             toast.error('Please enter a valid amount');
             return;
@@ -173,6 +181,14 @@ const CampaignDetail = () => {
 
     const progress = campaign.funding_percentage || 0;
     const daysRemaining = campaign.days_remaining ?? campaign.duration_days ?? 0;
+    const isOwnCampaign = Boolean(user?.id && campaign.creator_id === user.id);
+    const isCreatorAccount = user?.role === 'creator';
+    const canBack = !isCreatorAccount && !isOwnCampaign;
+    const backBlockedMessage = isCreatorAccount
+        ? 'Creator accounts cannot back campaigns. Switch to investor mode to support other projects.'
+        : isOwnCampaign
+            ? 'You cannot back campaigns you created.'
+            : null;
 
     return (
         <div className="min-h-screen pt-24 px-6 pb-12">
@@ -597,15 +613,21 @@ const CampaignDetail = () => {
                             </div>
 
                             {/* Action Buttons */}
-                            <motion.button
-                                whileHover={{ scale: 1.02 }}
-                                whileTap={{ scale: 0.98 }}
-                                onClick={() => setShowInvestModal(true)}
-                                className="btn-primary w-full mb-3"
-                                disabled={daysRemaining <= 0}
-                            >
-                                {daysRemaining <= 0 ? 'Campaign Ended' : 'Back This Project'}
-                            </motion.button>
+                            {canBack ? (
+                                <motion.button
+                                    whileHover={{ scale: 1.02 }}
+                                    whileTap={{ scale: 0.98 }}
+                                    onClick={() => setShowInvestModal(true)}
+                                    className="btn-primary w-full mb-3"
+                                    disabled={daysRemaining <= 0}
+                                >
+                                    {daysRemaining <= 0 ? 'Campaign Ended' : 'Back This Project'}
+                                </motion.button>
+                            ) : (
+                                <div className="w-full mb-3 p-4 rounded-xl bg-white/5 border border-white/10 text-center">
+                                    <p className="text-sm text-white/70">{backBlockedMessage}</p>
+                                </div>
+                            )}
 
                             <div className="flex gap-3">
                                 <motion.button
@@ -647,12 +669,16 @@ const CampaignDetail = () => {
                                             transition={{ delay: 0.4 + index * 0.1 }}
                                             whileHover={{ scale: 1.02 }}
                                             onClick={() => {
+                                                if (!canBack || !reward.is_available) return;
                                                 setSelectedReward(reward);
                                                 setInvestAmount(reward.min_amount.toString());
                                                 setShowInvestModal(true);
                                             }}
-                                            className={`glass-card p-4 cursor-pointer border-2 transition-colors ${!reward.is_available ? 'opacity-50 cursor-not-allowed' : 'border-transparent hover:border-primary'
-                                                }`}
+                                            className={`glass-card p-4 border-2 transition-colors ${
+                                                !reward.is_available || !canBack
+                                                    ? 'opacity-50 cursor-not-allowed'
+                                                    : 'cursor-pointer border-transparent hover:border-primary'
+                                            }`}
                                         >
                                             <div className="font-bold text-primary mb-1">${reward.min_amount}+</div>
                                             <h4 className="font-semibold mb-2">{reward.title}</h4>

@@ -5,6 +5,7 @@ import { Link } from 'react-router-dom';
 import { userAPI, campaignsAPI, notificationsAPI, SERVER_BASE } from '../services/api';
 import { FiTrendingUp, FiUsers, FiDollarSign, FiZap, FiEdit, FiEye, FiBarChart2, FiTrash2, FiCheckCircle, FiPlus, FiArrowRight } from 'react-icons/fi';
 import toast from 'react-hot-toast';
+import AIEvaluationModal from '../components/AIEvaluationModal';
 
 const Dashboard = () => {
     const { user, isAuthenticated } = useAuthStore();
@@ -286,9 +287,11 @@ const Dashboard = () => {
 
 // Campaign Row with thumbnail + AI ring
 const CampaignRow = ({ campaign, index, onDelete, onEndEarly }) => {
+    const [showAiModal, setShowAiModal] = useState(false);
     const progress = campaign.funding_percentage || 0;
     const canEndEarly = progress >= 100 && campaign.status !== 'funded' && campaign.status !== 'expired';
     const aiPct = campaign.ai_score ? Math.round(campaign.ai_score * 100) : null;
+    const hasAiEvaluation = campaign.ai_score != null;
     const scoreColor = aiPct >= 70 ? '#10b981' : aiPct >= 40 ? '#f59e0b' : '#ef4444';
 
     const statusColors = {
@@ -343,6 +346,36 @@ const CampaignRow = ({ campaign, index, onDelete, onEndEarly }) => {
                 </div>
 
                 <div className="flex gap-1.5">
+                    {hasAiEvaluation && (
+                        <motion.button
+                            whileHover={{ scale: 1.12 }}
+                            whileTap={{ scale: 0.95 }}
+                            onClick={() => setShowAiModal(true)}
+                            className="relative p-2 rounded-lg text-sm overflow-hidden group"
+                            title="View AI Evaluation"
+                        >
+                            <motion.span
+                                className="absolute inset-0 rounded-lg bg-gradient-to-br from-[#667eea] to-[#f093fb] opacity-90"
+                                animate={{
+                                    boxShadow: [
+                                        '0 0 10px rgba(102, 126, 234, 0.45)',
+                                        '0 0 22px rgba(240, 147, 251, 0.65)',
+                                        '0 0 10px rgba(102, 126, 234, 0.45)',
+                                    ],
+                                }}
+                                transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
+                            />
+                            <motion.span
+                                className="absolute inset-0 rounded-lg bg-gradient-to-br from-[#667eea] to-[#f093fb] opacity-0 group-hover:opacity-100"
+                                animate={{ rotate: [0, 360] }}
+                                transition={{ duration: 4, repeat: Infinity, ease: 'linear' }}
+                                style={{ filter: 'blur(6px)' }}
+                            />
+                            <span className="relative z-10 flex items-center justify-center text-white drop-shadow-[0_0_6px_rgba(255,255,255,0.6)]">
+                                <FiZap size={14} strokeWidth={2.5} />
+                            </span>
+                        </motion.button>
+                    )}
                     <Link to={`/campaign/${campaign.id}`}>
                         <motion.button whileHover={{ scale: 1.1 }} className="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-sm" title="View"><FiEye size={14} /></motion.button>
                     </Link>
@@ -377,6 +410,12 @@ const CampaignRow = ({ campaign, index, onDelete, onEndEarly }) => {
                     <span>Goal: ${campaign.usd_goal?.toLocaleString()}</span>
                 </div>
             </div>
+
+            <AIEvaluationModal
+                open={showAiModal}
+                onClose={() => setShowAiModal(false)}
+                campaign={campaign}
+            />
         </motion.div>
     );
 };

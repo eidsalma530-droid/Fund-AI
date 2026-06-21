@@ -9,15 +9,39 @@ import re
 import jwt as pyjwt
 from datetime import datetime, timedelta
 from functools import wraps
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, abort
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
-from sqlalchemy import or_, and_
+from werkzeug.security import generate_password_hash, check_password_hash
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
+# Ensure Python can verify HTTPS certs (fixes Firebase login on Windows)
+try:
+    import certifi
+    os.environ.setdefault('SSL_CERT_FILE', certifi.where())
+    os.environ.setdefault('REQUESTS_CA_BUNDLE', certifi.where())
+except ImportError:
+    pass
+
+FIREBASE_PROJECT_ID = os.environ.get('FIREBASE_PROJECT_ID', 'fund-ai-5f3ed')
 
 from models import (
-    db, User, Campaign, Investment, CampaignImage, CampaignUpdate,
-    Comment, Bookmark, Review, Milestone, Reward, Notification, Payment,
-    FAQ, Message, ScheduledUpdate, AnalyticsEvent, TeamMember, Referral, ReferralUse
+    db,
+    User, Campaign, Investment, CampaignImage,
+    CampaignUpdate, Comment, Bookmark, Review,
+    Milestone, Reward, Notification, Payment,
+    FAQ, Message, ScheduledUpdate, AnalyticsEvent,
+    TeamMember, Referral, ReferralUse,
+    user_to_dict, campaign_to_dict, investment_to_dict, campaign_image_to_dict,
+    campaign_update_to_dict, comment_to_dict, bookmark_to_dict, review_to_dict,
+    milestone_to_dict, reward_to_dict, notification_to_dict, payment_to_dict,
+    faq_to_dict, message_to_dict, scheduled_update_to_dict, analytics_event_to_dict,
+    team_member_to_dict, referral_to_dict, referral_use_to_dict,
+    campaign_funding_percentage, campaign_days_remaining,
+    set_password, check_password
 )
 from ai_evaluator import evaluator
 import firebase_admin
@@ -32,11 +56,14 @@ ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
 # Create Flask app
 app = Flask(__name__, static_folder='../frontend', static_url_path='')
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'fundai-dev-key-change-me-in-production')
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', f'sqlite:///{os.path.join(BASE_DIR, "fundai.db")}')
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///' + os.path.join(BASE_DIR, 'fundai.db'))
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['CAMPAIGN_UPLOAD_FOLDER'] = CAMPAIGN_UPLOAD_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max upload size
+
+# Initialize SQLAlchemy
+db.init_app(app)
 
 # Initialize extensions
 CORS(app, origins=[
@@ -58,10 +85,30 @@ CORS(app, origins=[
     'http://127.0.0.1:5179',
     'http://127.0.0.1:5180',
     'http://127.0.0.1:5000',
+    # Production URLs
+    'https://eidsalma530-droid.github.io',
+    'https://eidzzzzzzzzzzz-fundai-backend.hf.space',
     os.environ.get('FRONTEND_URL', 'http://localhost:5173'),
-])
-db.init_app(app)
+], supports_credentials=True, methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], allow_headers=['Content-Type', 'Authorization'])
 
+def _run_schema_migrations():
+    """Apply lightweight SQLite migrations for new columns."""
+    from sqlalchemy import inspect, text
+    inspector = inspect(db.engine)
+    if 'users' not in inspector.get_table_names():
+        return
+    columns = {col['name'] for col in inspector.get_columns('users')}
+    if 'creator_downgraded' not in columns:
+        db.session.execute(text('ALTER TABLE users ADD COLUMN creator_downgraded BOOLEAN DEFAULT 0'))
+        db.session.commit()
+        print('✅ Added users.creator_downgraded column')
+
+
+# Initialize SQLite database
+with app.app_context():
+    db.create_all()
+    _run_schema_migrations()
+    print("✅ SQLite database initialized")
 # Ensure upload directories exist
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(CAMPAIGN_UPLOAD_FOLDER, exist_ok=True)
@@ -139,22 +186,90 @@ def sanitize_input(text, max_length=10000):
     return text.strip()
 
 # Initialize Firebase Admin
+import json as _json
+
 SERVICE_ACCOUNT_PATH = os.path.join(BASE_DIR, 'fund-ai-5f3ed-firebase-adminsdk-fbsvc-3b27ddb860.json')
+FIREBASE_CONFIG_JSON = os.environ.get('FIREBASE_CONFIG_JSON')
+
 try:
-    if os.path.exists(SERVICE_ACCOUNT_PATH):
+    if FIREBASE_CONFIG_JSON:
+        # Option 1: Read credentials from environment variable (Render / cloud deployment)
+        service_info = _json.loads(FIREBASE_CONFIG_JSON)
+        cred = credentials.Certificate(service_info)
+        firebase_admin.initialize_app(cred)
+        print("✅ Firebase Admin initialized from FIREBASE_CONFIG_JSON env var")
+    elif os.path.exists(SERVICE_ACCOUNT_PATH):
+        # Option 2: Read credentials from local JSON file (local development)
         cred = credentials.Certificate(SERVICE_ACCOUNT_PATH)
         firebase_admin.initialize_app(cred)
-        print("✅ Firebase Admin initialized with service account key")
+        print("✅ Firebase Admin initialized with service account key file")
     else:
-        # Fallback: initialize with just the project ID
+        # Option 3: Fallback — initialize with just the project ID
         cred = credentials.ApplicationDefault() if os.environ.get('GOOGLE_APPLICATION_CREDENTIALS') else None
         firebase_admin.initialize_app(cred, {'projectId': 'fund-ai-5f3ed'}) if cred else firebase_admin.initialize_app(options={'projectId': 'fund-ai-5f3ed'})
-        print("⚠️ Firebase Admin initialized with project ID only. Place serviceAccountKey.json in backend/ for full functionality.")
+        print("⚠️ Firebase Admin initialized with project ID only. Set FIREBASE_CONFIG_JSON env var for full functionality.")
 except Exception as e:
     print(f"⚠️ Firebase Admin init warning: {e}. Google Sign-In token verification may not work.")
 
 
 # ============== JWT HELPERS ==============
+
+def _is_firebase_token_retriable_error(error_msg):
+    """Whether Firebase token verification can fall back to local decode."""
+    lowered = error_msg.lower()
+    return any(marker in lowered for marker in (
+        'token used too early',
+        'iat',
+        'clock',
+        'ssl',
+        'certificate',
+        'certIFICATE_VERIFY_FAILED'.lower(),
+        'connection',
+        'retries exceeded',
+    ))
+
+
+def _decode_firebase_id_token(id_token):
+    """Verify Firebase ID token, with fallbacks for clock skew and SSL issues."""
+    try:
+        return auth.verify_id_token(id_token, clock_skew_seconds=60)
+    except Exception as primary_error:
+        error_msg = str(primary_error)
+        if not _is_firebase_token_retriable_error(error_msg):
+            raise
+
+        print(f"⚠️ Firebase token verification fallback: {error_msg}")
+
+        try:
+            import google.auth.transport.requests
+            import google.oauth2.id_token
+
+            request_adapter = google.auth.transport.requests.Request()
+            return google.oauth2.id_token.verify_firebase_token(
+                id_token,
+                request_adapter,
+                audience=FIREBASE_PROJECT_ID,
+                clock_skew_in_seconds=600,
+            )
+        except Exception as fallback_error:
+            print(f"⚠️ OAuth fallback failed: {fallback_error}")
+
+        payload = pyjwt.decode(id_token, options={'verify_signature': False})
+        now = datetime.utcnow().timestamp()
+
+        if payload.get('exp', 0) < now - 60:
+            raise ValueError('Token expired') from primary_error
+
+        iss = payload.get('iss', '')
+        if not iss.startswith('https://securetoken.google.com/'):
+            raise ValueError('Invalid token issuer') from primary_error
+
+        aud = payload.get('aud', '')
+        if aud != FIREBASE_PROJECT_ID:
+            raise ValueError('Invalid token audience') from primary_error
+
+        return payload
+
 
 def generate_token(user_id):
     """Generate a JWT token for a user"""
@@ -196,43 +311,67 @@ def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
+def validate_investment_eligibility(user_id, campaign):
+    """Return (ok, error_message, status_code) for backing a campaign."""
+    user = User.query.get(user_id)
+    if not user:
+        return False, 'User not found', 404
+
+    if user.role == 'creator':
+        return False, 'Creator accounts cannot back campaigns. Switch to investor mode to support other projects.', 403
+
+    if campaign.creator_id == user_id:
+        return False, 'You cannot back your own campaigns', 403
+
+    return True, None, None
+
+
 def update_campaign_status(campaign):
     """Update campaign status based on funding progress"""
     old_status = campaign.status
+    goal = campaign.usd_goal or 0
+    raised = campaign.amount_raised or 0
     
     # Calculate funding percentage
-    funding_pct = (campaign.amount_raised / campaign.usd_goal * 100) if campaign.usd_goal > 0 else 0
+    funding_pct = (raised / goal * 100) if goal > 0 else 0
     
-    # Update status based on funding level
+    # Determine new status
+    new_status = old_status
     if funding_pct >= 100:
-        campaign.status = 'funded'
+        new_status = 'funded'
     elif funding_pct >= 75:
-        campaign.status = 'almost_funded'  # 75%+ funded
+        new_status = 'almost_funded'
     elif funding_pct >= 50:
-        campaign.status = 'halfway'  # 50%+ funded
+        new_status = 'halfway'
     elif funding_pct > 0:
-        campaign.status = 'active'  # Has investments
-    # else keep existing status (pending, evaluated, etc.)
+        new_status = 'active'
+    
+    # Update in DB
+    campaign.status = new_status
+    db.session.commit()
     
     # If status changed, notify creator
-    if campaign.status != old_status and old_status not in [campaign.status]:
+    if new_status != old_status:
         status_messages = {
-            'funded': f'🎉 Congratulations! Your campaign "{campaign.name}" has reached its funding goal!',
-            'almost_funded': f'🔥 Amazing! Your campaign "{campaign.name}" is 75% funded!',
-            'halfway': f'💪 Great progress! Your campaign "{campaign.name}" is 50% funded!'
+            'funded': f'Your campaign "{campaign.name}" has reached its funding goal!',
+            'almost_funded': f'Your campaign "{campaign.name}" is 75% funded!',
+            'halfway': f'Your campaign "{campaign.name}" is 50% funded!'
         }
         
-        if campaign.status in status_messages:
-            notification = Notification(
+        if new_status in status_messages:
+            status_title = new_status.replace("_", " ").title()
+            notif = Notification(
                 user_id=campaign.creator_id,
                 type='milestone',
-                title=f'Campaign Status: {campaign.status.replace("_", " ").title()}',
-                message=status_messages[campaign.status],
-                link=f'/campaign/{campaign.id}'
+                title=f'Campaign Status: {status_title}',
+                message=status_messages[new_status],
+                link=f'/campaign/{campaign.id}',
+                is_read=False,
             )
-            db.session.add(notification)
+            db.session.add(notif)
+            db.session.commit()
     
-    return campaign.status
+    return new_status
 
 
 # ============== STATIC FILE ROUTES ==============
@@ -257,58 +396,50 @@ def serve_avatar(filename):
 # ============== AUTH ROUTES ==============
 
 @app.route('/api/auth/signup', methods=['POST'])
-@rate_limit(max_requests=5, window_seconds=300)  # 5 signups per 5 minutes per IP
+@rate_limit(max_requests=5, window_seconds=300)
 def signup():
     """Register a new user"""
     data = request.get_json()
     
-    # Validate required fields
     required = ['email', 'password', 'name', 'role']
     for field in required:
         if not data.get(field):
             return jsonify({'error': f'Missing required field: {field}'}), 400
     
-    # Password strength validation
     password = data['password']
     if len(password) < 6:
         return jsonify({'error': 'Password must be at least 6 characters'}), 400
     if not any(c.isdigit() for c in password):
         return jsonify({'error': 'Password must contain at least one number'}), 400
     
-    # Check if email exists
     if User.query.filter_by(email=data['email']).first():
         return jsonify({'error': 'Email already registered'}), 409
     
-    # Validate role
     if data['role'] not in ['creator', 'investor']:
         return jsonify({'error': 'Role must be creator or investor'}), 400
     
-    # Create user
     user = User(
         email=data['email'],
+        password_hash=set_password(data['password']),
         role=data['role'],
         name=data['name'],
         age=data.get('age'),
         nationality=data.get('nationality'),
         about=data.get('about', '')
     )
-    user.set_password(data['password'])
-    
     db.session.add(user)
     db.session.commit()
-    
-    # Generate JWT token
     token = generate_token(user.id)
     
     return jsonify({
         'message': 'User registered successfully',
-        'user': user.to_dict(),
+        'user': user_to_dict(user),
         'token': token
     }), 201
 
 
 @app.route('/api/auth/login', methods=['POST'])
-@rate_limit(max_requests=10, window_seconds=60)  # 10 login attempts per minute per IP
+@rate_limit(max_requests=10, window_seconds=60)
 def login():
     """Authenticate user"""
     data = request.get_json()
@@ -318,15 +449,14 @@ def login():
     
     user = User.query.filter_by(email=data['email']).first()
     
-    if not user or not user.check_password(data['password']):
+    if not user or not user.password_hash or not check_password(user.password_hash, data['password']):
         return jsonify({'error': 'Invalid email or password'}), 401
     
-    # Generate JWT token
     token = generate_token(user.id)
     
     return jsonify({
         'message': 'Login successful',
-        'user': user.to_dict(),
+        'user': user_to_dict(user),
         'token': token
     })
 
@@ -344,7 +474,7 @@ def verify_token():
         user = User.query.get(data['user_id'])
         if not user:
             return jsonify({'error': 'User not found'}), 401
-        return jsonify({'user': user.to_dict(), 'valid': True})
+        return jsonify({'user': user_to_dict(user), 'valid': True})
     except pyjwt.ExpiredSignatureError:
         return jsonify({'error': 'Token expired'}), 401
     except pyjwt.InvalidTokenError:
@@ -360,7 +490,7 @@ def change_password(current_user):
     if not data.get('current_password') or not data.get('new_password'):
         return jsonify({'error': 'Current and new password required'}), 400
     
-    if not current_user.check_password(data['current_password']):
+    if not check_password(current_user.password_hash or '', data['current_password']):
         return jsonify({'error': 'Current password is incorrect'}), 401
     
     new_password = data['new_password']
@@ -369,14 +499,14 @@ def change_password(current_user):
     if not any(c.isdigit() for c in new_password):
         return jsonify({'error': 'New password must contain at least one number'}), 400
     
-    current_user.set_password(new_password)
+    current_user.password_hash = set_password(new_password)
     db.session.commit()
     
     return jsonify({'message': 'Password changed successfully'})
 
 
 @app.route('/api/auth/firebase-login', methods=['POST'])
-@rate_limit(max_requests=10, window_seconds=60)  # 10 firebase logins per minute per IP
+@rate_limit(max_requests=10, window_seconds=60)
 def firebase_login():
     """Authenticate user with Firebase idToken - with clock skew tolerance"""
     data = request.get_json()
@@ -385,64 +515,32 @@ def firebase_login():
     if not id_token:
         return jsonify({'error': 'No token provided'}), 400
         
-    decoded_token = None
-    
-    # Attempt 1: Standard verification with max allowed skew (60s)
     try:
-        decoded_token = auth.verify_id_token(id_token, clock_skew_seconds=60)
+        decoded_token = _decode_firebase_id_token(id_token)
     except Exception as e:
-        error_msg = str(e)
-        # If it's a time-related error, fall back to manual decode
-        if 'Token used too early' in error_msg or 'iat' in error_msg.lower() or 'time' in error_msg.lower():
-            print(f"⚠️ Clock skew detected, using fallback verification: {error_msg}")
-            try:
-                # Manually decode the token without time verification
-                # This is safe because we still verify the signature via Firebase's public keys
-                import google.auth.transport.requests
-                import google.oauth2.id_token
-                
-                request_adapter = google.auth.transport.requests.Request()
-                decoded_token = google.oauth2.id_token.verify_firebase_token(
-                    id_token, request_adapter, 
-                    audience='fund-ai-5f3ed',
-                    clock_skew_in_seconds=600  # 10 minutes tolerance
-                )
-            except Exception as fallback_error:
-                print(f"⚠️ Fallback also failed, trying raw decode: {fallback_error}")
-                # Last resort: decode without verification but extract user info
-                # We trust this because the token came directly from Firebase client SDK
-                import base64, json
-                try:
-                    # Decode the payload (middle part of JWT)
-                    payload = id_token.split('.')[1]
-                    # Add padding if needed
-                    payload += '=' * (4 - len(payload) % 4)
-                    decoded_token = json.loads(base64.urlsafe_b64decode(payload))
-                except Exception as decode_error:
-                    return jsonify({'error': f'Token verification failed: {str(e)}'}), 401
-        else:
-            return jsonify({'error': str(e)}), 401
-    
-    if not decoded_token:
-        return jsonify({'error': 'Could not verify token'}), 401
+        return jsonify({'error': f'Token verification failed: {str(e)}'}), 401
     
     uid = decoded_token.get('uid') or decoded_token.get('sub') or decoded_token.get('user_id')
     email = decoded_token.get('email')
     name = decoded_token.get('name', '')
     avatar = decoded_token.get('picture', 'default_avatar.png')
     
+    # Get role from request body (sent by Signup page), default to 'investor'
+    requested_role = data.get('role')
+    if requested_role not in ('creator', 'investor'):
+        requested_role = 'investor'
+    
     if not uid or not email:
         return jsonify({'error': 'Invalid token payload'}), 401
     
     try:
-        # Check if user exists by email or uid
         user = User.query.filter((User.firebase_uid == uid) | (User.email == email)).first()
         
         if not user:
             user = User(
                 email=email,
                 firebase_uid=uid,
-                role='investor',
+                role=requested_role,
                 name=name,
                 avatar=avatar
             )
@@ -458,7 +556,7 @@ def firebase_login():
         
         return jsonify({
             'message': 'Login successful',
-            'user': user.to_dict(),
+            'user': user_to_dict(user),
             'token': token,
             'profile_complete': profile_complete
         })
@@ -475,22 +573,44 @@ def complete_profile(current_user):
     
     if not data.get('age') or not data.get('nationality'):
         return jsonify({'error': 'Age and nationality are required'}), 400
-        
+    
+    update_fields = {}
     if 'name' in data and data['name']:
         current_user.name = data['name']
-        
-    current_user.age = data['age']
-    current_user.nationality = data['nationality']
-    
-    # Optionally update role if provided during onboarding
     if 'role' in data and data['role'] in ['creator', 'investor']:
         current_user.role = data['role']
-        
+    current_user.age = data['age']
+    current_user.nationality = data['nationality']
     db.session.commit()
     
     return jsonify({
         'message': 'Profile completed successfully',
-        'user': current_user.to_dict()
+        'user': user_to_dict(current_user)
+    })
+
+
+@app.route('/api/auth/switch-role', methods=['POST'])
+@token_required
+def switch_role(current_user):
+    """Switch between investor and creator accounts."""
+    data = request.get_json() or {}
+    new_role = data.get('role')
+
+    if new_role not in ('creator', 'investor'):
+        return jsonify({'error': 'Invalid role'}), 400
+
+    if new_role == current_user.role:
+        return jsonify({
+            'message': 'Already using this account type',
+            'user': user_to_dict(current_user),
+        })
+
+    current_user.role = new_role
+    db.session.commit()
+
+    return jsonify({
+        'message': f'Switched to {new_role} account',
+        'user': user_to_dict(current_user),
     })
 
 
@@ -499,29 +619,35 @@ def complete_profile(current_user):
 @app.route('/api/profile/<int:user_id>', methods=['GET'])
 def get_profile(user_id):
     """Get user profile"""
-    user = User.query.get_or_404(user_id)
-    return jsonify({'user': user.to_dict()})
+    user = User.query.get(user_id)
+    if not user:
+        abort(404)
+    return jsonify({'user': user_to_dict(user)})
 
 
 @app.route('/api/profile/<int:user_id>', methods=['PUT'])
 def update_profile(user_id):
     """Update user profile"""
-    user = User.query.get_or_404(user_id)
+    user = User.query.get(user_id)
+    if not user:
+        abort(404)
     data = request.get_json()
     
     if data.get('name'):
         user.name = data['name']
     if 'about' in data:
         user.about = data['about']
-    
     db.session.commit()
-    return jsonify({'user': user.to_dict()})
+    
+    return jsonify({'user': user_to_dict(user)})
 
 
 @app.route('/api/profile/<int:user_id>/avatar', methods=['POST'])
 def upload_avatar(user_id):
     """Upload user avatar"""
-    user = User.query.get_or_404(user_id)
+    user = User.query.get(user_id)
+    if not user:
+        abort(404)
     
     if 'avatar' not in request.files:
         return jsonify({'error': 'No avatar file provided'}), 400
@@ -531,13 +657,11 @@ def upload_avatar(user_id):
         return jsonify({'error': 'No file selected'}), 400
     
     if file and allowed_file(file.filename):
-        # Generate unique filename
         ext = file.filename.rsplit('.', 1)[1].lower()
         filename = f"{uuid.uuid4().hex}.{ext}"
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         file.save(filepath)
         
-        # Update user avatar
         user.avatar = filename
         db.session.commit()
         
@@ -553,20 +677,16 @@ def upload_avatar(user_id):
 
 @app.route('/api/campaigns', methods=['GET'])
 def get_campaigns():
-    """Get all campaigns with optional filtering - only published campaigns visible to public"""
+    """Get all campaigns with optional filtering"""
     category = request.args.get('category')
     status = request.args.get('status')
     min_score = request.args.get('min_score', type=float)
-    creator_id = request.args.get('creator_id', type=int)  # For creator to see their own drafts
+    creator_id = request.args.get('creator_id', type=int)
     
     query = Campaign.query
-    
-    # Only show published+ campaigns unless creator is requesting their own
     if creator_id:
-        # Creator can see all their campaigns
         query = query.filter_by(creator_id=creator_id)
     else:
-        # Public can only see published, active, or funded campaigns
         query = query.filter(Campaign.status.in_(['published', 'active', 'halfway', 'almost_funded', 'funded']))
     
     if category:
@@ -577,14 +697,16 @@ def get_campaigns():
         query = query.filter(Campaign.ai_score >= min_score)
     
     campaigns = query.order_by(Campaign.created_at.desc()).all()
-    return jsonify({'campaigns': [c.to_dict() for c in campaigns]})
+    return jsonify({'campaigns': [campaign_to_dict(c) for c in campaigns]})
 
 
 @app.route('/api/campaigns/<int:campaign_id>', methods=['GET'])
 def get_campaign(campaign_id):
     """Get single campaign details"""
-    campaign = Campaign.query.get_or_404(campaign_id)
-    return jsonify({'campaign': campaign.to_dict()})
+    campaign = Campaign.query.get(campaign_id)
+    if not campaign:
+        abort(404)
+    return jsonify({'campaign': campaign_to_dict(campaign)})
 
 
 @app.route('/api/campaigns', methods=['POST'])
@@ -592,13 +714,15 @@ def create_campaign():
     """Create a new campaign as draft"""
     data = request.get_json()
     
-    # Validate required fields
     required = ['creator_id', 'name', 'blurb', 'usd_goal', 'duration_days', 'main_category', 'country']
     for field in required:
         if field not in data:
             return jsonify({'error': f'Missing required field: {field}'}), 400
+
+    creator = User.query.get(data['creator_id'])
+    if not creator or creator.role != 'creator':
+        return jsonify({'error': 'Only creator accounts can create campaigns'}), 403
     
-    # Create campaign as draft
     campaign = Campaign(
         creator_id=data['creator_id'],
         name=data['name'],
@@ -610,70 +734,63 @@ def create_campaign():
         main_category=data['main_category'],
         country=data['country'],
         has_video=bool(data.get('has_video', False)),
-        status='draft'  # Start as draft - not visible to investors
+        status='draft'
     )
-    
     db.session.add(campaign)
     db.session.commit()
     
     return jsonify({
         'message': 'Campaign created as draft',
-        'campaign': campaign.to_dict()
+        'campaign': campaign_to_dict(campaign)
     }), 201
 
 
 @app.route('/api/campaigns/<int:campaign_id>/evaluate', methods=['POST'])
 def evaluate_campaign(campaign_id):
-    """Evaluate campaign with AI models and send feedback notification"""
-    campaign = Campaign.query.get_or_404(campaign_id)
+    """Evaluate campaign with AI models"""
+    campaign = Campaign.query.get(campaign_id)
+    if not campaign:
+        abort(404)
     
-    # Prepare campaign data
     campaign_data = {
         'name': campaign.name,
-        'blurb': campaign.blurb,
-        'description': campaign.description or campaign.blurb,
+        'blurb': campaign.blurb or '',
+        'description': (campaign.description or campaign.blurb or ''),
         'usd_goal': campaign.usd_goal,
         'duration_days': campaign.duration_days,
-        'prep_days': campaign.prep_days,
+        'prep_days': (campaign.prep_days or 30),
         'main_category': campaign.main_category,
         'country': campaign.country,
-        'has_video': campaign.has_video
+        'has_video': (campaign.has_video or False)
     }
     
-    # Get AI prediction
     ai_score, dl_score, xgb_score = evaluator.predict(campaign_data)
     
     if ai_score is None:
         return jsonify({'error': 'AI evaluation failed. Please try again.'}), 500
     
-    # Get Gemini advice (now with individual model scores for detailed analysis)
     gemini_advice = evaluator.get_gemini_advice(campaign_data, ai_score, dl_score, xgb_score)
     
-    # Update campaign
-    campaign.ai_score = ai_score
-    campaign.dl_score = dl_score
-    campaign.xgb_score = xgb_score
-    campaign.gemini_advice = gemini_advice
-    campaign.status = 'evaluated'
+    campaign.ai_score = ai_score; campaign.dl_score = dl_score; campaign.xgb_score = xgb_score
+    campaign.gemini_advice = gemini_advice; campaign.status = 'evaluated'
+    db.session.commit()
     
-    # Create notification for creator with AI feedback
     score_pct = int(ai_score * 100)
     dl_pct = int(dl_score * 100) if dl_score else 0
     xgb_pct = int(xgb_score * 100) if xgb_score else 0
-    notification = Notification(
-        user_id=campaign.creator_id,
-        type='ai_evaluation',
-        title=f'AI Evaluation Complete: {score_pct}/100',
-        message=f'Your campaign "{campaign.name}" scored {score_pct}/100 (DL: {dl_pct}%, XGB: {xgb_pct}%). Review the feedback to improve your chances of success.',
-        link=f'/edit-campaign/{campaign_id}'
+    notif = Notification( user_id= campaign.creator_id,
+        type= 'ai_evaluation',
+        title= f'AI Evaluation Complete: {score_pct}/100',
+        message= f'Your campaign "{campaign.name}" scored {score_pct}/100 (DL: {dl_pct}%, XGB: {xgb_pct}%).',
+        link= f'/edit-campaign/{campaign_id}', is_read=False, 
     )
-    db.session.add(notification)
-    
+    db.session.add(notif)
     db.session.commit()
     
+    updated = Campaign.query.get(campaign_id)
     return jsonify({
         'message': 'Campaign evaluated successfully',
-        'campaign': campaign.to_dict(),
+        'campaign': campaign_to_dict(updated),
         'score': score_pct,
         'dl_score': round(dl_score * 100, 1) if dl_score else 0,
         'xgb_score': round(xgb_score * 100, 1) if xgb_score else 0,
@@ -683,80 +800,59 @@ def evaluate_campaign(campaign_id):
 
 @app.route('/api/campaigns/<int:campaign_id>/publish', methods=['POST'])
 def publish_campaign(campaign_id):
-    """Publish a campaign - makes it visible to investors"""
-    campaign = Campaign.query.get_or_404(campaign_id)
+    """Publish a campaign"""
+    campaign = Campaign.query.get(campaign_id)
+    if not campaign:
+        abort(404)
     
-    # Must be evaluated first
-    if campaign.status not in ['evaluated', 'draft']:
-        if campaign.status in ['published', 'active', 'funded']:
-            return jsonify({'error': 'Campaign is already published'}), 400
-        return jsonify({'error': 'Campaign must be evaluated before publishing'}), 400
-    
-    # If not evaluated, evaluate first
+    if campaign.status in ['published', 'active', 'funded']:
+        return jsonify({'error': 'Campaign is already published'}), 400
     if campaign.ai_score is None:
         return jsonify({'error': 'Campaign must be evaluated before publishing'}), 400
     
-    campaign.status = 'published'
+    campaign.status = 'published'; db.session.commit()
     
-    # Notify creator
-    notification = Notification(
-        user_id=campaign.creator_id,
-        type='campaign_published',
-        title='Campaign Published! 🚀',
-        message=f'Your campaign "{campaign.name}" is now live and visible to investors.',
-        link=f'/campaign/{campaign_id}'
+    notif = Notification( user_id= campaign.creator_id,
+        type= 'campaign_published', title= 'Campaign Published! 🚀',
+        message= f'Your campaign "{campaign.name}" is now live.',
+        link= f'/campaign/{campaign_id}', is_read=False, 
     )
-    db.session.add(notification)
-    
+    db.session.add(notif)
     db.session.commit()
     
-    return jsonify({
-        'message': 'Campaign published successfully!',
-        'campaign': campaign.to_dict()
-    })
+    updated = Campaign.query.get(campaign_id)
+    return jsonify({'message': 'Campaign published successfully!', 'campaign': campaign_to_dict(updated)})
 
 
 @app.route('/api/campaigns/user/<int:user_id>', methods=['GET'])
 def get_user_campaigns(user_id):
     """Get campaigns by creator"""
     campaigns = Campaign.query.filter_by(creator_id=user_id).order_by(Campaign.created_at.desc()).all()
-    return jsonify({'campaigns': [c.to_dict() for c in campaigns]})
-
-
-# Note: Profile GET endpoint is defined above in PROFILE ROUTES section
+    return jsonify({'campaigns': [campaign_to_dict(c) for c in campaigns]})
 
 
 @app.route('/api/campaigns/<int:campaign_id>', methods=['DELETE'])
 def delete_campaign(campaign_id):
-    """Delete a campaign - refunds all backers and notifies them"""
+    """Delete a campaign"""
     data = request.get_json() or {}
     user_id = data.get('user_id')
-    
-    campaign = Campaign.query.get_or_404(campaign_id)
-    
-    # Verify ownership
+    campaign = Campaign.query.get(campaign_id)
+    if not campaign:
+        abort(404)
     if campaign.creator_id != user_id:
         return jsonify({'error': 'Only the campaign creator can delete this campaign'}), 403
     
-    # Get all investments for this campaign
     investments = Investment.query.filter_by(campaign_id=campaign_id).all()
-    
-    # Refund and notify each backer
-    for investment in investments:
-        # Create refund notification for backer
-        notification = Notification(
-            user_id=investment.investor_id,
-            type='refund',
-            title='Campaign Cancelled - Refund Issued',
-            message=f'The campaign "{campaign.name}" has been cancelled. Your pledge of ${investment.amount:.2f} has been refunded.',
-            link='/dashboard'
+    for inv in investments:
+        notif = Notification( user_id= inv.investor_id,
+            type= 'refund', title= 'Campaign Cancelled - Refund Issued',
+            message= f'The campaign "{campaign.name}" has been cancelled. Your pledge of ${inv.amount:.2f} has been refunded.',
+            link= '/dashboard', is_read=False, 
         )
-        db.session.add(notification)
-        
-        # Delete the investment (mock refund)
-        db.session.delete(investment)
+        db.session.add(notif)
+        db.session.commit()
     
-    # Delete related data
+    Investment.query.filter_by(campaign_id=campaign_id).delete()
     Reward.query.filter_by(campaign_id=campaign_id).delete()
     Comment.query.filter_by(campaign_id=campaign_id).delete()
     CampaignUpdate.query.filter_by(campaign_id=campaign_id).delete()
@@ -764,10 +860,7 @@ def delete_campaign(campaign_id):
     Milestone.query.filter_by(campaign_id=campaign_id).delete()
     FAQ.query.filter_by(campaign_id=campaign_id).delete()
     Bookmark.query.filter_by(campaign_id=campaign_id).delete()
-    
-    # Delete the campaign
-    db.session.delete(campaign)
-    db.session.commit()
+    db.session.delete(Campaign.query.get(campaign_id)); db.session.commit()
     
     return jsonify({'message': 'Campaign deleted and all backers have been refunded and notified'})
 
@@ -777,53 +870,38 @@ def end_campaign_early(campaign_id):
     """End a campaign early - only if 100% funded"""
     data = request.get_json() or {}
     user_id = data.get('user_id')
-    
-    campaign = Campaign.query.get_or_404(campaign_id)
-    
-    # Verify ownership
+    campaign = Campaign.query.get(campaign_id)
+    if not campaign:
+        abort(404)
     if campaign.creator_id != user_id:
         return jsonify({'error': 'Only the campaign creator can end this campaign'}), 403
-    
-    # Check if 100% funded
-    if campaign.funding_percentage < 100:
+    if campaign_funding_percentage(campaign) < 100:
         return jsonify({'error': 'Campaign must be 100% funded to end early'}), 400
-    
-    # Check if already ended
     if campaign.status in ['ended', 'funded']:
         return jsonify({'error': 'Campaign has already ended'}), 400
     
-    # End the campaign
-    campaign.status = 'funded'
-    campaign.duration_days = 0  # Set to 0 to mark as ended
+    campaign.status = 'funded'; campaign.duration_days = 0; db.session.commit()
     
-    # Notify all backers
     investments = Investment.query.filter_by(campaign_id=campaign_id).all()
-    for investment in investments:
-        notification = Notification(
-            user_id=investment.investor_id,
-            type='campaign_funded',
-            title='Campaign Successfully Funded! 🎉',
-            message=f'Great news! The campaign "{campaign.name}" has reached its goal and ended successfully. The creator will begin fulfillment soon.',
-            link=f'/campaign/{campaign_id}'
+    for inv in investments:
+        notif = Notification( user_id= inv.investor_id,
+            type= 'campaign_funded', title= 'Campaign Successfully Funded! 🎉',
+            message= f'The campaign "{campaign.name}" has reached its goal!',
+            link= f'/campaign/{campaign_id}', is_read=False, 
         )
-        db.session.add(notification)
+        db.session.add(notif)
+        db.session.commit()
     
-    # Notify creator
-    notification = Notification(
-        user_id=campaign.creator_id,
-        type='campaign_ended',
-        title='Campaign Ended Successfully! 🎉',
-        message=f'Your campaign "{campaign.name}" has ended with {campaign.funding_percentage:.0f}% funding. You can now begin fulfilling rewards to your {campaign.backers_count} backers.',
-        link=f'/campaign/{campaign_id}'
+    notif = Notification( user_id= campaign.creator_id,
+        type= 'campaign_ended', title= 'Campaign Ended Successfully! 🎉',
+        message= f'Your campaign "{campaign.name}" has ended successfully.',
+        link= f'/campaign/{campaign_id}', is_read=False, 
     )
-    db.session.add(notification)
-    
+    db.session.add(notif)
     db.session.commit()
     
-    return jsonify({
-        'message': 'Campaign ended successfully! All backers have been notified.',
-        'campaign': campaign.to_dict()
-    })
+    updated = Campaign.query.get(campaign_id)
+    return jsonify({'message': 'Campaign ended successfully!', 'campaign': campaign_to_dict(updated)})
 
 
 # ============== INVESTMENT ROUTES ==============
@@ -831,56 +909,55 @@ def end_campaign_early(campaign_id):
 @app.route('/api/campaigns/<int:campaign_id>/invest', methods=['POST'])
 def invest_in_campaign(campaign_id):
     """Invest in a campaign"""
-    campaign = Campaign.query.get_or_404(campaign_id)
+    campaign = Campaign.query.get(campaign_id)
+    if not campaign:
+        abort(404)
     data = request.get_json()
     
     if not data.get('investor_id'):
         return jsonify({'error': 'Investor ID required'}), 400
-    
     if not data.get('amount') or float(data['amount']) <= 0:
         return jsonify({'error': 'Valid investment amount required'}), 400
+
+    ok, error, status = validate_investment_eligibility(data['investor_id'], campaign)
+    if not ok:
+        return jsonify({'error': error}), status
     
     amount = float(data['amount'])
+    inv = Investment(
+investor_id=data['investor_id'],
+        campaign_id=campaign_id, amount=amount,
+        message=data.get('message', ''), reward_id=None)
+    db.session.add(inv); db.session.commit()
+    campaign.amount_raised = (campaign.amount_raised or 0) + amount; campaign.backers_count = (campaign.backers_count or 0) + 1; db.session.commit()
     
-    # Create investment
-    investment = Investment(
-        investor_id=data['investor_id'],
-        campaign_id=campaign_id,
-        amount=amount,
-        message=data.get('message', '')
-    )
-    
-    # Update campaign funding
-    campaign.amount_raised += amount
-    campaign.backers_count += 1
-    
-    db.session.add(investment)
-    db.session.commit()
-    
+    updated = Campaign.query.get(campaign_id)
     return jsonify({
         'message': 'Investment successful!',
-        'investment': investment.to_dict(),
-        'campaign': campaign.to_dict()
+        'investment': investment_to_dict(inv),
+        'campaign': campaign_to_dict(updated)
     }), 201
 
 
 @app.route('/api/campaigns/<int:campaign_id>/investments', methods=['GET'])
 def get_campaign_investments(campaign_id):
     """Get all investments for a campaign"""
-    campaign = Campaign.query.get_or_404(campaign_id)
-    investments = Investment.query.filter_by(campaign_id=campaign_id).order_by(Investment.created_at.desc()).all()
+    campaign = Campaign.query.get(campaign_id)
+    if not campaign:
+        abort(404)
+    invs = Investment.query.filter_by(campaign_id=campaign_id).order_by(Investment.created_at.desc()).all()
     return jsonify({
-        'investments': [i.to_dict() for i in investments],
-        'total_raised': campaign.amount_raised,
-        'backers_count': campaign.backers_count
+        'investments': [investment_to_dict(i) for i in invs],
+        'total_raised': (campaign.amount_raised or 0),
+        'backers_count': (campaign.backers_count or 0)
     })
 
 
 @app.route('/api/user/<int:user_id>/investments', methods=['GET'])
 def get_user_investments(user_id):
     """Get all investments made by a user"""
-    investments = Investment.query.filter_by(investor_id=user_id).order_by(Investment.created_at.desc()).all()
-    return jsonify({'investments': [i.to_dict() for i in investments]})
+    invs = Investment.query.filter_by(investor_id=user_id).order_by(Investment.created_at.desc()).all()
+    return jsonify({'investments': [investment_to_dict(i) for i in invs]})
 
 
 # ============== UTILITY ROUTES ==============
@@ -946,17 +1023,18 @@ def health_check():
 def get_campaign_images(campaign_id):
     """Get all images for a campaign"""
     images = CampaignImage.query.filter_by(campaign_id=campaign_id).all()
-    return jsonify({'images': [img.to_dict() for img in images]})
+    return jsonify({'images': [campaign_image_to_dict(img) for img in images]})
 
 
 @app.route('/api/campaigns/<int:campaign_id>/images', methods=['POST'])
 def upload_campaign_image(campaign_id):
     """Upload image to campaign"""
-    campaign = Campaign.query.get_or_404(campaign_id)
+    campaign = Campaign.query.get(campaign_id)
+    if not campaign:
+        abort(404)
     
     if 'image' not in request.files:
         return jsonify({'error': 'No image file provided'}), 400
-    
     file = request.files['image']
     if file.filename == '':
         return jsonify({'error': 'No file selected'}), 400
@@ -969,22 +1047,14 @@ def upload_campaign_image(campaign_id):
         
         is_primary = request.form.get('is_primary', 'false').lower() == 'true'
         caption = request.form.get('caption', '')
-        
-        # If setting as primary, unset other primary images
         if is_primary:
-            CampaignImage.query.filter_by(campaign_id=campaign_id, is_primary=True).update({'is_primary': False})
+            CampaignImage.query.filter_by(campaign_id=campaign_id, is_primary=True).update({'is_primary': False}); db.session.commit()
         
-        image = CampaignImage(
-            campaign_id=campaign_id,
-            image_url=filename,
-            is_primary=is_primary,
-            caption=caption
-        )
-        
-        db.session.add(image)
-        db.session.commit()
-        
-        return jsonify({'message': 'Image uploaded', 'image': image.to_dict()}), 201
+        img = CampaignImage(
+campaign_id=campaign_id,
+            image_url=filename, is_primary=is_primary, caption=caption)
+        db.session.add(img); db.session.commit()
+        return jsonify({'message': 'Image uploaded', 'image': campaign_image_to_dict(img)}), 201
     
     return jsonify({'error': 'Invalid file type'}), 400
 
@@ -1000,48 +1070,45 @@ def serve_campaign_image(filename):
 def get_campaign_updates(campaign_id):
     """Get all updates for a campaign"""
     updates = CampaignUpdate.query.filter_by(campaign_id=campaign_id).order_by(CampaignUpdate.created_at.desc()).all()
-    return jsonify({'updates': [u.to_dict() for u in updates]})
+    return jsonify({'updates': [campaign_update_to_dict(u) for u in updates]})
 
 
 @app.route('/api/campaigns/<int:campaign_id>/updates', methods=['POST'])
 def create_campaign_update(campaign_id):
     """Create a campaign update"""
-    campaign = Campaign.query.get_or_404(campaign_id)
+    campaign = Campaign.query.get(campaign_id)
+    if not campaign:
+        abort(404)
     data = request.get_json()
     
     if not data.get('title') or not data.get('content'):
         return jsonify({'error': 'Title and content required'}), 400
     
-    update = CampaignUpdate(
-        campaign_id=campaign_id,
-        title=data['title'],
-        content=data['content']
-    )
+    upd = CampaignUpdate(
+campaign_id=campaign_id,
+        title=data['title'], content=data['content'])
+    db.session.add(upd); db.session.commit()
     
-    db.session.add(update)
-    
-    # Notify all backers
-    investments = Investment.query.filter_by(campaign_id=campaign_id).all()
-    for inv in investments:
-        notification = Notification(
-            user_id=inv.investor_id,
-            type='update',
-            title=f'New update from {campaign.name}',
-            message=data['title'],
-            link=f'/campaign/{campaign_id}'
+    invs = Investment.query.filter_by(campaign_id=campaign_id).all()
+    for inv in invs:
+        notif = Notification( user_id= inv.investor_id,
+            type= 'update', title= f'New update from {campaign.name}',
+            message= data['title'], link= f'/campaign/{campaign_id}',
+            is_read=False, 
         )
-        db.session.add(notification)
+        db.session.add(notif)
+        db.session.commit()
     
-    db.session.commit()
-    
-    return jsonify({'message': 'Update posted', 'update': update.to_dict()}), 201
+    return jsonify({'message': 'Update posted', 'update': campaign_update_to_dict(upd)}), 201
 
 
 @app.route('/api/campaigns/<int:campaign_id>/updates/<int:update_id>', methods=['DELETE'])
 def delete_campaign_update(campaign_id, update_id):
     """Delete a campaign update"""
-    update = CampaignUpdate.query.filter_by(id=update_id, campaign_id=campaign_id).first_or_404()
-    db.session.delete(update)
+    upd_obj = CampaignUpdate.query.filter_by(id=update_id, campaign_id=campaign_id).first()
+    if not upd_obj:
+        abort(404)
+    db.session.delete(upd_obj)
     db.session.commit()
     return jsonify({'message': 'Update deleted'})
 
@@ -1052,49 +1119,46 @@ def delete_campaign_update(campaign_id, update_id):
 def get_campaign_comments(campaign_id):
     """Get all comments for a campaign"""
     comments = Comment.query.filter_by(campaign_id=campaign_id, parent_id=None).order_by(Comment.created_at.desc()).all()
-    return jsonify({'comments': [c.to_dict() for c in comments]})
+    return jsonify({'comments': [comment_to_dict(c) for c in comments]})
 
 
 @app.route('/api/campaigns/<int:campaign_id>/comments', methods=['POST'])
 def create_comment(campaign_id):
     """Add a comment to a campaign"""
-    campaign = Campaign.query.get_or_404(campaign_id)
+    campaign = Campaign.query.get(campaign_id)
+    if not campaign:
+        abort(404)
     data = request.get_json()
     
     if not data.get('user_id') or not data.get('content'):
         return jsonify({'error': 'User ID and content required'}), 400
     
-    comment = Comment(
-        campaign_id=campaign_id,
-        user_id=data['user_id'],
-        content=data['content'],
-        parent_id=data.get('parent_id')
-    )
+    cmt = Comment(
+campaign_id=campaign_id,
+        user_id=data['user_id'], content=data['content'],
+        parent_id=data.get('parent_id'))
+    db.session.add(cmt); db.session.commit()
     
-    db.session.add(comment)
-    
-    # Notify campaign creator
     if campaign.creator_id != data['user_id']:
         user = User.query.get(data['user_id'])
-        notification = Notification(
-            user_id=campaign.creator_id,
-            type='comment',
-            title=f'New comment on {campaign.name}',
-            message=f'{user.name if user else "Someone"} commented on your campaign',
-            link=f'/campaign/{campaign_id}'
+        notif = Notification( user_id= campaign.creator_id,
+            type= 'comment', title= f'New comment on {campaign.name}',
+            message= f'{user.name if user else "Someone"} commented on your campaign',
+            link= f'/campaign/{campaign_id}', is_read=False, 
         )
-        db.session.add(notification)
+        db.session.add(notif)
+        db.session.commit()
     
-    db.session.commit()
-    
-    return jsonify({'message': 'Comment added', 'comment': comment.to_dict()}), 201
+    return jsonify({'message': 'Comment added', 'comment': comment_to_dict(cmt)}), 201
 
 
 @app.route('/api/comments/<int:comment_id>', methods=['DELETE'])
 def delete_comment(comment_id):
     """Delete a comment"""
-    comment = Comment.query.get_or_404(comment_id)
-    db.session.delete(comment)
+    cmt_obj = Comment.query.get(comment_id)
+    if not cmt_obj:
+        abort(404)
+    db.session.delete(cmt_obj)
     db.session.commit()
     return jsonify({'message': 'Comment deleted'})
 
@@ -1105,7 +1169,7 @@ def delete_comment(comment_id):
 def get_user_bookmarks(user_id):
     """Get all bookmarks for a user"""
     bookmarks = Bookmark.query.filter_by(user_id=user_id).order_by(Bookmark.created_at.desc()).all()
-    return jsonify({'bookmarks': [b.to_dict() for b in bookmarks]})
+    return jsonify({'bookmarks': [bookmark_to_dict(b) for b in bookmarks]})
 
 
 @app.route('/api/bookmarks', methods=['POST'])
@@ -1123,10 +1187,9 @@ def toggle_bookmark():
         db.session.commit()
         return jsonify({'message': 'Bookmark removed', 'bookmarked': False})
     else:
-        bookmark = Bookmark(user_id=data['user_id'], campaign_id=data['campaign_id'])
-        db.session.add(bookmark)
-        db.session.commit()
-        return jsonify({'message': 'Bookmark added', 'bookmarked': True, 'bookmark': bookmark.to_dict()})
+        bm = Bookmark(user_id=data['user_id'], campaign_id=data['campaign_id'])
+        db.session.add(bm); db.session.commit()
+        return jsonify({'message': 'Bookmark added', 'bookmarked': True, 'bookmark': bookmark_to_dict(bm)})
 
 
 @app.route('/api/user/<int:user_id>/bookmarks/<int:campaign_id>', methods=['GET'])
@@ -1142,7 +1205,7 @@ def check_bookmark(user_id, campaign_id):
 def get_user_reviews(user_id):
     """Get reviews for a user"""
     reviews = Review.query.filter_by(reviewed_id=user_id).order_by(Review.created_at.desc()).all()
-    return jsonify({'reviews': [r.to_dict() for r in reviews]})
+    return jsonify({'reviews': [review_to_dict(r) for r in reviews]})
 
 
 @app.route('/api/reviews', methods=['POST'])
@@ -1158,36 +1221,22 @@ def create_review():
     if not 1 <= data['rating'] <= 5:
         return jsonify({'error': 'Rating must be between 1 and 5'}), 400
     
-    # Check if already reviewed
-    existing = Review.query.filter_by(
-        reviewer_id=data['reviewer_id'],
-        campaign_id=data['campaign_id']
-    ).first()
-    
+    existing = Review.query.filter_by(reviewer_id=data['reviewer_id'], campaign_id=data['campaign_id']).first()
     if existing:
         return jsonify({'error': 'You have already reviewed this campaign'}), 409
     
-    review = Review(
-        reviewer_id=data['reviewer_id'],
-        reviewed_id=data['reviewed_id'],
-        campaign_id=data['campaign_id'],
-        rating=data['rating'],
-        content=data.get('content', '')
-    )
+    rev = Review(
+reviewer_id=data['reviewer_id'],
+        reviewed_id=data['reviewed_id'], campaign_id=data['campaign_id'],
+        rating=data['rating'], content=data.get('content', ''))
+    db.session.add(rev); db.session.commit()
     
-    db.session.add(review)
+    all_revs = Review.query.filter_by(reviewed_id=data['reviewed_id']).all()
+    total_rating = sum(r.rating for r in all_revs)
+    count = len(all_revs)
+    reviewed_user = User.query.get(data['reviewed_id']); reviewed_user.total_reviews = count; reviewed_user.avg_rating = total_rating / count if count else 0; db.session.commit()
     
-    # Update user average rating
-    user = User.query.get(data['reviewed_id'])
-    if user:
-        all_reviews = Review.query.filter_by(reviewed_id=user.id).all()
-        total_rating = sum(r.rating for r in all_reviews) + data['rating']
-        user.total_reviews = len(all_reviews) + 1
-        user.avg_rating = total_rating / user.total_reviews
-    
-    db.session.commit()
-    
-    return jsonify({'message': 'Review added', 'review': review.to_dict()}), 201
+    return jsonify({'message': 'Review added', 'review': review_to_dict(rev)}), 201
 
 
 # ============== MILESTONES ROUTES ==============
@@ -1195,8 +1244,8 @@ def create_review():
 @app.route('/api/campaigns/<int:campaign_id>/milestones', methods=['GET'])
 def get_milestones(campaign_id):
     """Get all milestones for a campaign"""
-    milestones = Milestone.query.filter_by(campaign_id=campaign_id).order_by(Milestone.target_amount).all()
-    return jsonify({'milestones': [m.to_dict() for m in milestones]})
+    milestones = Milestone.query.filter_by(campaign_id=campaign_id).order_by(Milestone.target_amount.asc()).all()
+    return jsonify({'milestones': [milestone_to_dict(m) for m in milestones]})
 
 
 @app.route('/api/campaigns/<int:campaign_id>/milestones', methods=['POST'])
@@ -1207,17 +1256,12 @@ def create_milestone(campaign_id):
     if not data.get('title') or not data.get('target_amount'):
         return jsonify({'error': 'Title and target amount required'}), 400
     
-    milestone = Milestone(
-        campaign_id=campaign_id,
-        title=data['title'],
-        description=data.get('description', ''),
-        target_amount=float(data['target_amount'])
-    )
-    
-    db.session.add(milestone)
-    db.session.commit()
-    
-    return jsonify({'message': 'Milestone created', 'milestone': milestone.to_dict()}), 201
+    ms = Milestone(
+campaign_id=campaign_id,
+        title=data['title'], description=data.get('description', ''),
+        target_amount=float(data['target_amount']), is_reached=False)
+    db.session.add(ms); db.session.commit()
+    return jsonify({'message': 'Milestone created', 'milestone': milestone_to_dict(ms)}), 201
 
 
 # ============== REWARDS ROUTES ==============
@@ -1225,8 +1269,8 @@ def create_milestone(campaign_id):
 @app.route('/api/campaigns/<int:campaign_id>/rewards', methods=['GET'])
 def get_rewards(campaign_id):
     """Get all rewards for a campaign"""
-    rewards = Reward.query.filter_by(campaign_id=campaign_id).order_by(Reward.min_amount).all()
-    return jsonify({'rewards': [r.to_dict() for r in rewards]})
+    rewards = Reward.query.filter_by(campaign_id=campaign_id).order_by(Reward.min_amount.asc()).all()
+    return jsonify({'rewards': [reward_to_dict(r) for r in rewards]})
 
 
 @app.route('/api/campaigns/<int:campaign_id>/rewards', methods=['POST'])
@@ -1239,32 +1283,24 @@ def create_reward(campaign_id):
     if not data.get('title') or not min_amount:
         return jsonify({'error': 'Title and amount required'}), 400
     
-    reward = Reward(
-        campaign_id=campaign_id,
-        title=data['title'],
-        description=data.get('description', ''),
-        min_amount=float(min_amount),
-        max_backers=data.get('max_backers'),
-        estimated_delivery=data.get('estimated_delivery', '')
-    )
-    
-    db.session.add(reward)
-    db.session.commit()
-    
-    return jsonify({'message': 'Reward created', 'reward': reward.to_dict()}), 201
+    rwd = Reward(
+campaign_id=campaign_id,
+        title=data['title'], description=data.get('description', ''),
+        min_amount=float(min_amount), max_backers=data.get('max_backers'),
+        backers_count=0, estimated_delivery=data.get('estimated_delivery', ''))
+    db.session.add(rwd); db.session.commit()
+    return jsonify({'message': 'Reward created', 'reward': reward_to_dict(rwd)}), 201
 
 
 @app.route('/api/campaigns/<int:campaign_id>/rewards/<int:reward_id>', methods=['DELETE'])
 def delete_reward(campaign_id, reward_id):
     """Delete a reward tier from a campaign"""
-    reward = Reward.query.filter_by(id=reward_id, campaign_id=campaign_id).first_or_404()
-    
-    # Check if any investments use this reward
+    reward = Reward.query.filter_by(id=reward_id, campaign_id=campaign_id).first()
+    if not reward:
+        abort(404)
     if Investment.query.filter_by(reward_id=reward_id).count() > 0:
         return jsonify({'error': 'Cannot delete reward with existing backers'}), 400
-    
-    db.session.delete(reward)
-    db.session.commit()
+    db.session.delete(reward); db.session.commit()
     return jsonify({'message': 'Reward deleted'})
 
 
@@ -1276,7 +1312,7 @@ def get_notifications(user_id):
     notifications = Notification.query.filter_by(user_id=user_id).order_by(Notification.created_at.desc()).limit(50).all()
     unread_count = Notification.query.filter_by(user_id=user_id, is_read=False).count()
     return jsonify({
-        'notifications': [n.to_dict() for n in notifications],
+        'notifications': [notification_to_dict(n) for n in notifications],
         'unread_count': unread_count
     })
 
@@ -1284,17 +1320,17 @@ def get_notifications(user_id):
 @app.route('/api/notifications/<int:notification_id>/read', methods=['POST'])
 def mark_notification_read(notification_id):
     """Mark a notification as read"""
-    notification = Notification.query.get_or_404(notification_id)
-    notification.is_read = True
-    db.session.commit()
+    notification = Notification.query.get(notification_id)
+    if not notification:
+        abort(404)
+    notification.is_read = True; db.session.commit()
     return jsonify({'message': 'Notification marked as read'})
 
 
 @app.route('/api/user/<int:user_id>/notifications/read-all', methods=['POST'])
 def mark_all_notifications_read(user_id):
     """Mark all notifications as read"""
-    Notification.query.filter_by(user_id=user_id, is_read=False).update({'is_read': True})
-    db.session.commit()
+    Notification.query.filter_by(user_id=user_id, is_read=False).update({'is_read': True}); db.session.commit()
     return jsonify({'message': 'All notifications marked as read'})
 
 
@@ -1310,76 +1346,62 @@ def process_payment():
         if field not in data:
             return jsonify({'error': f'Missing required field: {field}'}), 400
     
-    campaign = Campaign.query.get_or_404(data['campaign_id'])
+    campaign = Campaign.query.get(data['campaign_id'])
+    if not campaign:
+        abort(404)
+
+    ok, error, status = validate_investment_eligibility(data['user_id'], campaign)
+    if not ok:
+        return jsonify({'error': error}), status
+
     amount = float(data['amount'])
     
-    # Create investment
-    investment = Investment(
-        investor_id=data['user_id'],
-        campaign_id=data['campaign_id'],
-        amount=amount,
-        message=data.get('message', ''),
-        reward_id=data.get('reward_id')
-    )
+    inv = Investment(
+investor_id=data['user_id'],
+        campaign_id=data['campaign_id'], amount=amount,
+        message=data.get('message', ''), reward_id=data.get('reward_id'))
+    db.session.add(inv); db.session.commit()
     
-    db.session.add(investment)
-    db.session.flush()  # Get investment ID
-    
-    # Create mock payment record
-    payment = Payment(
-        investment_id=investment.id,
-        user_id=data['user_id'],
-        amount=amount,
+    pmt = Payment(
+investment_id=inv.id,
+        user_id=data['user_id'], amount=amount,
         payment_method=data.get('payment_method', 'card'),
-        status='completed',
-        transaction_id=f"TXN-{uuid.uuid4().hex[:12].upper()}"
-    )
+        status='completed', transaction_id=f"TXN-{uuid.uuid4().hex[:12].upper()}")
+    db.session.add(pmt); db.session.commit()
     
-    db.session.add(payment)
+    new_raised = (campaign.amount_raised or 0) + amount
+    campaign.amount_raised = (campaign.amount_raised or 0) + amount; campaign.backers_count = (campaign.backers_count or 0) + 1; db.session.commit()
     
-    # Update campaign funding
-    campaign.amount_raised += amount
-    campaign.backers_count += 1
-    
-    # Update reward backers count if applicable
     if data.get('reward_id'):
-        reward = Reward.query.get(data['reward_id'])
-        if reward:
-            reward.backers_count += 1
+        rwd = Reward.query.get(data['reward_id']); rwd.backers_count = (rwd.backers_count or 0) + 1; db.session.commit()
     
-    # Check and update milestones
-    milestones = Milestone.query.filter_by(campaign_id=campaign.id, is_reached=False).all()
-    for milestone in milestones:
-        if campaign.amount_raised >= milestone.target_amount:
-            milestone.is_reached = True
-            # Notify creator
-            notification = Notification(
-                user_id=campaign.creator_id,
-                type='milestone',
-                title=f'Milestone reached: {milestone.title}',
-                message=f'Your campaign {campaign.name} has reached a funding milestone!',
-                link=f'/campaign/{campaign.id}'
+    ms_list = Milestone.query.filter_by(campaign_id=campaign.id, is_reached=False).all()
+    for ms in ms_list:
+        if new_raised >= ms.target_amount:
+            ms.is_reached = True; db.session.commit()
+            notif = Notification( user_id= campaign.creator_id,
+                type= 'milestone', title= f'Milestone reached: {ms.title}',
+                message= f'Your campaign {campaign.name} has reached a funding milestone!',
+                link= f'/campaign/{campaign.id}', is_read=False, 
             )
-            db.session.add(notification)
+            db.session.add(notif)
+            db.session.commit()
     
-    # Notify campaign creator
     user = User.query.get(data['user_id'])
-    notification = Notification(
-        user_id=campaign.creator_id,
-        type='investment',
-        title=f'New investment on {campaign.name}',
-        message=f'{user.name if user else "Someone"} invested ${amount:.2f}',
-        link=f'/campaign/{campaign.id}'
+    notif = Notification( user_id= campaign.creator_id,
+        type= 'investment', title= f'New investment on {campaign.name}',
+        message= f'{user.name if user else "Someone"} invested ${amount:.2f}',
+        link= f'/campaign/{campaign.id}', is_read=False, 
     )
-    db.session.add(notification)
-    
+    db.session.add(notif)
     db.session.commit()
     
+    updated_campaign = Campaign.query.get(data['campaign_id'])
     return jsonify({
         'message': 'Payment successful!',
-        'payment': payment.to_dict(),
-        'investment': investment.to_dict(),
-        'campaign': campaign.to_dict()
+        'payment': payment_to_dict(pmt),
+        'investment': investment_to_dict(inv),
+        'campaign': campaign_to_dict(updated_campaign)
     }), 201
 
 
@@ -1396,58 +1418,35 @@ def search_campaigns():
     status = request.args.get('status')
     sort_by = request.args.get('sort', 'newest')  # newest, trending, ending, funded
     
-    campaigns_query = Campaign.query
-    
-    # Text search
+    query_obj = Campaign.query
     if query:
-        search_filter = or_(
-            Campaign.name.ilike(f'%{query}%'),
-            Campaign.blurb.ilike(f'%{query}%')
-        )
-        campaigns_query = campaigns_query.filter(search_filter)
-    
-    # Filters
+        query_obj = query_obj.filter(db.or_(Campaign.name.ilike(f'%{query}%'), Campaign.blurb.ilike(f'%{query}%')))
     if category:
-        campaigns_query = campaigns_query.filter_by(main_category=category)
+        query_obj = query_obj.filter_by(main_category=category)
     if status:
-        campaigns_query = campaigns_query.filter_by(status=status)
+        query_obj = query_obj.filter_by(status=status)
     if min_goal is not None:
-        campaigns_query = campaigns_query.filter(Campaign.usd_goal >= min_goal)
+        query_obj = query_obj.filter(Campaign.usd_goal >= min_goal)
     if max_goal is not None:
-        campaigns_query = campaigns_query.filter(Campaign.usd_goal <= max_goal)
+        query_obj = query_obj.filter(Campaign.usd_goal <= max_goal)
     if min_score is not None:
-        campaigns_query = campaigns_query.filter(Campaign.ai_score >= min_score)
+        query_obj = query_obj.filter(Campaign.ai_score >= min_score)
     
-    # Sorting
-    if sort_by == 'newest':
-        campaigns_query = campaigns_query.order_by(Campaign.created_at.desc())
-    elif sort_by == 'trending':
-        campaigns_query = campaigns_query.order_by(Campaign.views_count.desc())
-    elif sort_by == 'funded':
-        campaigns_query = campaigns_query.order_by(Campaign.amount_raised.desc())
-    elif sort_by == 'ending':
-        campaigns_query = campaigns_query.order_by(Campaign.duration_days.asc())
-    elif sort_by == 'score':
-        campaigns_query = campaigns_query.order_by(Campaign.ai_score.desc())
+    sort_map = {
+        'newest': Campaign.created_at.desc(), 'trending': Campaign.views_count.desc(),
+        'funded': Campaign.amount_raised.desc(), 'ending': Campaign.duration_days.asc(),
+        'score': Campaign.ai_score.desc(),
+    }
+    sort_col = sort_map.get(sort_by, Campaign.created_at.desc())
+    campaigns = query_obj.order_by(sort_col).limit(50).all()
     
-    campaigns = campaigns_query.limit(50).all()
-    
-    # Also search users if query is provided
     users = []
     if query:
-        user_results = User.query.filter(
-            User.name.ilike(f'%{query}%')
-        ).limit(10).all()
-        users = [{
-            'id': u.id,
-            'name': u.name,
-            'email': u.email,
-            'role': u.role,
-            'avatar': u.avatar
-        } for u in user_results]
+        user_results = User.query.filter(User.name.ilike(f'%{query}%')).limit(10).all() if query else []
+        users = [{'id': u.id, 'name': u.name or '', 'email': u.email or '', 'role': u.role or '', 'avatar': u.avatar or ''} for u in user_results]
     
     return jsonify({
-        'campaigns': [c.to_dict() for c in campaigns],
+        'campaigns': [campaign_to_dict(c) for c in campaigns],
         'users': users,
         'count': len(campaigns)
     })
@@ -1458,71 +1457,77 @@ def search_campaigns():
 @app.route('/api/user/<int:user_id>/dashboard', methods=['GET'])
 def get_user_dashboard(user_id):
     """Get dashboard data for a user"""
-    user = User.query.get_or_404(user_id)
+    user = User.query.get(user_id)
+    if not user:
+        abort(404)
     
-    # Get user stats
     if user.role == 'creator':
         campaigns = Campaign.query.filter_by(creator_id=user_id).all()
-        total_raised = sum(c.amount_raised for c in campaigns)
-        total_backers = sum(c.backers_count for c in campaigns)
+        total_raised = sum((c.amount_raised or 0) for c in campaigns)
+        total_backers = sum((c.backers_count or 0) for c in campaigns)
+        
+        recent_invs = []
+        for c in campaigns:
+            invs = Investment.query.filter_by(campaign_id=c.id).order_by(Investment.created_at.desc()).limit(3).all()
+            recent_invs.extend([investment_to_dict(i) for i in invs])
         
         return jsonify({
-            'user': user.to_dict(),
+            'user': user_to_dict(user),
             'stats': {
                 'campaigns_count': len(campaigns),
                 'total_raised': total_raised,
                 'total_backers': total_backers,
-                'avg_score': sum(c.ai_score or 0 for c in campaigns) / len(campaigns) if campaigns else 0
+                'avg_score': sum((c.ai_score or 0) for c in campaigns) / len(campaigns) if campaigns else 0
             },
-            'campaigns': [c.to_dict() for c in campaigns[:5]],
-            'recent_investments': [
-                inv.to_dict() for c in campaigns 
-                for inv in Investment.query.filter_by(campaign_id=c.id).order_by(Investment.created_at.desc()).limit(3).all()
-            ][:10]
+            'campaigns': [campaign_to_dict(c) for c in campaigns[:5]],
+            'recent_investments': recent_invs[:10]
         })
     else:
         investments = Investment.query.filter_by(investor_id=user_id).all()
-        total_invested = sum(i.amount for i in investments)
+        total_invested = sum((i.amount or 0) for i in investments)
+        bms = Bookmark.query.filter_by(user_id=user_id).limit(5).all()
         
         return jsonify({
-            'user': user.to_dict(),
+            'user': user_to_dict(user),
             'stats': {
                 'investments_count': len(investments),
                 'total_invested': total_invested,
                 'campaigns_backed': len(set(i.campaign_id for i in investments))
             },
-            'investments': [i.to_dict() for i in investments[:10]],
-            'bookmarks': [b.to_dict() for b in Bookmark.query.filter_by(user_id=user_id).limit(5).all()]
+            'investments': [investment_to_dict(i) for i in investments[:10]],
+            'bookmarks': [bookmark_to_dict(b) for b in bms]
         })
 
 
 @app.route('/api/campaigns/<int:campaign_id>/analytics', methods=['GET'])
 def get_campaign_analytics(campaign_id):
     """Get analytics for a campaign"""
-    campaign = Campaign.query.get_or_404(campaign_id)
+    campaign = Campaign.query.get(campaign_id)
+    if not campaign:
+        abort(404)
     
-    # Increment view count
-    campaign.views_count += 1
-    db.session.commit()
+    campaign.views_count = (campaign.views_count or 0) + 1; db.session.commit()
+    campaign = Campaign.query.get(campaign_id)
     
-    investments = Investment.query.filter_by(campaign_id=campaign_id).order_by(Investment.created_at).all()
+    investments = Investment.query.filter_by(campaign_id=campaign_id).order_by(Investment.created_at.asc()).all()
     
-    # Calculate daily funding progress
     from collections import defaultdict
     daily_funding = defaultdict(float)
     for inv in investments:
-        day = inv.created_at.strftime('%Y-%m-%d')
-        daily_funding[day] += inv.amount
+        day = inv.created_at.strftime('%Y-%m-%d') if hasattr(inv.created_at, 'strftime') else str(inv.created_at or '')[:10]
+        daily_funding[day] += (inv.amount or 0)
     
+    bc = (campaign.backers_count or 0)
+    ar = (campaign.amount_raised or 0)
     return jsonify({
-        'campaign': campaign.to_dict(),
+        'campaign': campaign_to_dict(campaign),
         'analytics': {
-            'views_count': campaign.views_count,
-            'backers_count': campaign.backers_count,
-            'amount_raised': campaign.amount_raised,
-            'funding_percentage': campaign.funding_percentage,
+            'views_count': (campaign.views_count or 0),
+            'backers_count': bc,
+            'amount_raised': ar,
+            'funding_percentage': campaign_funding_percentage(campaign),
             'daily_funding': dict(daily_funding),
-            'avg_investment': campaign.amount_raised / campaign.backers_count if campaign.backers_count > 0 else 0
+            'avg_investment': ar / bc if bc > 0 else 0
         }
     })
 
@@ -1532,6 +1537,9 @@ def get_campaign_analytics(campaign_id):
 @app.route('/api/admin/stats', methods=['GET'])
 def get_admin_stats():
     """Get platform statistics for admin"""
+
+    total_raised = db.session.query(db.func.sum(Campaign.amount_raised)).scalar() or 0
+
     return jsonify({
         'stats': {
             'total_users': User.query.count(),
@@ -1539,7 +1547,7 @@ def get_admin_stats():
             'total_investors': User.query.filter_by(role='investor').count(),
             'total_campaigns': Campaign.query.count(),
             'active_campaigns': Campaign.query.filter(Campaign.status.in_(['evaluated', 'active'])).count(),
-            'total_raised': db.session.query(db.func.sum(Campaign.amount_raised)).scalar() or 0,
+            'total_raised': total_raised,
             'total_investments': Investment.query.count()
         }
     })
@@ -1549,32 +1557,37 @@ def get_admin_stats():
 def get_all_users():
     """Get all users for admin"""
     users = User.query.order_by(User.created_at.desc()).all()
-    return jsonify({'users': [u.to_dict() for u in users]})
+    return jsonify({'users': [user_to_dict(u) for u in users]})
 
 
 @app.route('/api/admin/campaigns', methods=['GET'])
 def get_all_campaigns():
     """Get all campaigns for admin"""
     campaigns = Campaign.query.order_by(Campaign.created_at.desc()).all()
-    return jsonify({'campaigns': [c.to_dict() for c in campaigns]})
+    return jsonify({'campaigns': [campaign_to_dict(c) for c in campaigns]})
 
 
 @app.route('/api/admin/campaigns/<int:campaign_id>/feature', methods=['POST'])
 def toggle_featured(campaign_id):
     """Toggle featured status of a campaign"""
-    campaign = Campaign.query.get_or_404(campaign_id)
-    campaign.is_featured = not campaign.is_featured
-    db.session.commit()
-    return jsonify({'message': f'Campaign {"featured" if campaign.is_featured else "unfeatured"}', 'campaign': campaign.to_dict()})
+    campaign = Campaign.query.get(campaign_id)
+    if not campaign:
+        abort(404)
+    new_val = not (campaign.is_featured or False)
+    campaign.is_featured = new_val; db.session.commit()
+    updated = Campaign.query.get(campaign_id)
+    return jsonify({'message': f'Campaign {"featured" if new_val else "unfeatured"}', 'campaign': campaign_to_dict(updated)})
 
 
 @app.route('/api/admin/campaigns/<int:campaign_id>/verify', methods=['POST'])
 def verify_campaign(campaign_id):
     """Mark campaign as AI verified"""
-    campaign = Campaign.query.get_or_404(campaign_id)
-    campaign.is_ai_verified = True
-    db.session.commit()
-    return jsonify({'message': 'Campaign verified', 'campaign': campaign.to_dict()})
+    campaign = Campaign.query.get(campaign_id)
+    if not campaign:
+        abort(404)
+    campaign.is_ai_verified = True; db.session.commit()
+    updated = Campaign.query.get(campaign_id)
+    return jsonify({'message': 'Campaign verified', 'campaign': campaign_to_dict(updated)})
 
 
 # ============== PHASE 2: EDIT CAMPAIGN ==============
@@ -1582,34 +1595,30 @@ def verify_campaign(campaign_id):
 @app.route('/api/campaigns/<int:campaign_id>', methods=['PUT'])
 def update_campaign(campaign_id):
     """Update campaign details"""
-    campaign = Campaign.query.get_or_404(campaign_id)
+    campaign = Campaign.query.get(campaign_id)
+    if not campaign:
+        abort(404)
     data = request.json
     
-    # Allow editing name, blurb, description, has_video
-    if 'name' in data:
-        campaign.name = data['name']
-    if 'blurb' in data:
-        campaign.blurb = data['blurb']
-    if 'description' in data:
-        campaign.description = data['description']
-    if 'has_video' in data:
-        campaign.has_video = data['has_video']
-    if 'video_url' in data:
-        campaign.video_url = data['video_url']
+    update_fields = {}
+    for f in ['name', 'blurb', 'description', 'has_video', 'video_url']:
+        if f in data:
+            update_fields[f] = data[f]
     
-    # Only allow goal/duration changes if no investments yet
-    if campaign.backers_count == 0:
+    if (campaign.backers_count or 0) == 0:
         if 'usd_goal' in data:
-            campaign.usd_goal = data['usd_goal']
+            update_fields['usd_goal'] = data['usd_goal']
         if 'duration_days' in data:
-            campaign.duration_days = data['duration_days']
+            update_fields['duration_days'] = data['duration_days']
     
-    # Status changes
     if 'status' in data:
-        campaign.status = data['status']
+        update_fields['status'] = data['status']
     
-    db.session.commit()
-    return jsonify({'message': 'Campaign updated', 'campaign': campaign.to_dict()})
+    if update_fields:
+        for k, v in update_fields.items(): setattr(campaign, k, v)
+        db.session.commit()
+    updated = Campaign.query.get(campaign_id)
+    return jsonify({'message': 'Campaign updated', 'campaign': campaign_to_dict(updated)})
 
 
 # ============== PHASE 2: DRAFT CAMPAIGNS ==============
@@ -1620,7 +1629,7 @@ def update_campaign(campaign_id):
 def get_user_drafts(user_id):
     """Get user's draft campaigns"""
     drafts = Campaign.query.filter_by(creator_id=user_id, status='draft').all()
-    return jsonify({'drafts': [c.to_dict() for c in drafts]})
+    return jsonify({'drafts': [campaign_to_dict(c) for c in drafts]})
 
 
 # ============== PHASE 2: EMAIL VERIFICATION ==============
@@ -1634,10 +1643,8 @@ def send_verification():
     if not user:
         return jsonify({'error': 'User not found'}), 404
     
-    # Generate mock verification token
     token = str(uuid.uuid4())[:8].upper()
-    user.verification_token = token
-    db.session.commit()
+    user.verification_token = token; db.session.commit()
     
     # In production, would send actual email
     # For school project, just return the token for demo
@@ -1660,7 +1667,7 @@ def verify_email():
         user.is_email_verified = True
         user.verification_token = None
         db.session.commit()
-        return jsonify({'message': 'Email verified!', 'user': user.to_dict()})
+        return jsonify({'message': 'Email verified!', 'user': user_to_dict(user)})
     else:
         return jsonify({'error': 'Invalid verification code'}), 400
 
@@ -1670,46 +1677,47 @@ def verify_email():
 @app.route('/api/campaigns/<int:campaign_id>/faqs', methods=['GET'])
 def get_campaign_faqs(campaign_id):
     """Get FAQs for a campaign"""
-    faqs = FAQ.query.filter_by(campaign_id=campaign_id).order_by(FAQ.order).all()
-    return jsonify({'faqs': [f.to_dict() for f in faqs]})
+    faqs = FAQ.query.filter_by(campaign_id=campaign_id).order_by(FAQ.order.asc()).all()
+    return jsonify({'faqs': [faq_to_dict(f) for f in faqs]})
 
 
 @app.route('/api/campaigns/<int:campaign_id>/faqs', methods=['POST'])
 def add_campaign_faq(campaign_id):
     """Add FAQ to campaign"""
     data = request.json
-    faq = FAQ(
-        campaign_id=campaign_id,
-        question=data['question'],
-        answer=data['answer'],
-        order=data.get('order', 0)
-    )
-    db.session.add(faq)
-    db.session.commit()
-    return jsonify({'message': 'FAQ added', 'faq': faq.to_dict()}), 201
+    faq_doc = FAQ(
+campaign_id=campaign_id,
+        question=data['question'], answer=data['answer'],
+        order=data.get('order', 0))
+    db.session.add(faq_doc); db.session.commit()
+    return jsonify({'message': 'FAQ added', 'faq': faq_to_dict(faq_doc)}), 201
 
 
 @app.route('/api/faqs/<int:faq_id>', methods=['PUT'])
 def update_faq(faq_id):
     """Update a FAQ"""
-    faq = FAQ.query.get_or_404(faq_id)
+    faq = FAQ.query.get(faq_id)
+    if not faq:
+        abort(404)
     data = request.json
-    if 'question' in data:
-        faq.question = data['question']
-    if 'answer' in data:
-        faq.answer = data['answer']
-    if 'order' in data:
-        faq.order = data['order']
-    db.session.commit()
-    return jsonify({'message': 'FAQ updated', 'faq': faq.to_dict()})
+    update_fields = {}
+    if 'question' in data: update_fields['question'] = data['question']
+    if 'answer' in data: update_fields['answer'] = data['answer']
+    if 'order' in data: update_fields['order'] = data['order']
+    if update_fields:
+        for k, v in update_fields.items():
+            setattr(faq, k, v)
+        db.session.commit()
+    return jsonify({'message': 'FAQ updated', 'faq': faq_to_dict(faq)})
 
 
 @app.route('/api/faqs/<int:faq_id>', methods=['DELETE'])
 def delete_faq(faq_id):
     """Delete a FAQ"""
-    faq = FAQ.query.get_or_404(faq_id)
-    db.session.delete(faq)
-    db.session.commit()
+    faq = FAQ.query.get(faq_id)
+    if not faq:
+        abort(404)
+    db.session.delete(faq); db.session.commit()
     return jsonify({'message': 'FAQ deleted'})
 
 
@@ -1719,28 +1727,22 @@ def delete_faq(faq_id):
 def send_message():
     """Send a message"""
     data = request.json
-    message = Message(
-        sender_id=data['sender_id'],
-        recipient_id=data['recipient_id'],
-        campaign_id=data.get('campaign_id'),
-        subject=data['subject'],
-        content=data['content']
-    )
-    db.session.add(message)
+    msg = Message(
+sender_id=data['sender_id'],
+        recipient_id=data['recipient_id'], campaign_id=data.get('campaign_id'),
+        subject=data['subject'], content=data['content'],
+        is_read=False)
+    db.session.add(msg); db.session.commit()
     
-    # Create notification for recipient
     sender = User.query.get(data['sender_id'])
-    notification = Notification(
-        user_id=data['recipient_id'],
-        type='message',
-        title=f'New message from {sender.name if sender else "someone"}',
-        message=f"{data['subject'][:50]}",
-        link='/messages'
+    notif = Notification( user_id= data['recipient_id'],
+        type= 'message', title= f'New message from {sender.name if sender else "someone"}',
+        message= f"{data['subject'][:50]}", link= '/messages',
+        is_read=False, 
     )
-    db.session.add(notification)
-    
+    db.session.add(notif)
     db.session.commit()
-    return jsonify({'message': 'Message sent', 'data': message.to_dict()}), 201
+    return jsonify({'message': 'Message sent', 'data': message_to_dict(msg)}), 201
 
 
 @app.route('/api/user/<int:user_id>/messages', methods=['GET'])
@@ -1751,8 +1753,8 @@ def get_user_messages(user_id):
     unread_count = Message.query.filter_by(recipient_id=user_id, is_read=False).count()
     
     return jsonify({
-        'inbox': [m.to_dict() for m in inbox],
-        'sent': [m.to_dict() for m in sent],
+        'inbox': [message_to_dict(m) for m in inbox],
+        'sent': [message_to_dict(m) for m in sent],
         'unread_count': unread_count
     })
 
@@ -1760,9 +1762,10 @@ def get_user_messages(user_id):
 @app.route('/api/messages/<int:message_id>/read', methods=['POST'])
 def mark_message_read(message_id):
     """Mark message as read"""
-    message = Message.query.get_or_404(message_id)
-    message.is_read = True
-    db.session.commit()
+    message = Message.query.get(message_id)
+    if not message:
+        abort(404)
+    message.is_read = True; db.session.commit()
     return jsonify({'message': 'Marked as read'})
 
 
@@ -1771,10 +1774,8 @@ def mark_message_read(message_id):
 @app.route('/api/campaigns/category/<category>', methods=['GET'])
 def get_campaigns_by_category(category):
     """Get campaigns in a specific category"""
-    campaigns = Campaign.query.filter_by(main_category=category).filter(
-        Campaign.status != 'draft'
-    ).order_by(Campaign.created_at.desc()).all()
-    return jsonify({'campaigns': [c.to_dict() for c in campaigns], 'category': category})
+    campaigns = Campaign.query.filter(Campaign.main_category == category, Campaign.status != 'draft').order_by(Campaign.created_at.desc()).all()
+    return jsonify({'campaigns': [campaign_to_dict(c) for c in campaigns], 'category': category})
 
 
 # ============== PHASE 2: SIMILAR CAMPAIGNS ==============
@@ -1782,16 +1783,16 @@ def get_campaigns_by_category(category):
 @app.route('/api/campaigns/<int:campaign_id>/similar', methods=['GET'])
 def get_similar_campaigns(campaign_id):
     """Get similar campaigns based on category and AI score"""
-    campaign = Campaign.query.get_or_404(campaign_id)
+    campaign = Campaign.query.get(campaign_id)
+    if not campaign:
+        abort(404)
     
-    # Find similar by category
     similar = Campaign.query.filter(
         Campaign.id != campaign_id,
         Campaign.main_category == campaign.main_category,
         Campaign.status != 'draft'
     ).order_by(Campaign.ai_score.desc()).limit(4).all()
     
-    # If not enough, get top rated from other categories
     if len(similar) < 4:
         more = Campaign.query.filter(
             Campaign.id != campaign_id,
@@ -1800,7 +1801,7 @@ def get_similar_campaigns(campaign_id):
         ).order_by(Campaign.ai_score.desc()).limit(4 - len(similar)).all()
         similar.extend(more)
     
-    return jsonify({'similar': [c.to_dict() for c in similar]})
+    return jsonify({'campaigns': [campaign_to_dict(c) for c in similar]})
 
 
 # ============== PHASE 2: SCHEDULED UPDATES ==============
@@ -1811,25 +1812,20 @@ def schedule_update(campaign_id):
     data = request.json
     from datetime import datetime as dt
     
-    scheduled_update = ScheduledUpdate(
-        campaign_id=campaign_id,
-        title=data['title'],
-        content=data['content'],
-        scheduled_for=dt.fromisoformat(data['scheduled_for'])
-    )
-    db.session.add(scheduled_update)
-    db.session.commit()
-    return jsonify({'message': 'Update scheduled', 'scheduled_update': scheduled_update.to_dict()}), 201
+    su = ScheduledUpdate(
+campaign_id=campaign_id,
+        title=data['title'], content=data['content'],
+        scheduled_for=dt.fromisoformat(data['scheduled_for']),
+        is_published=False)
+    db.session.add(su); db.session.commit()
+    return jsonify({'message': 'Update scheduled', 'scheduled_update': scheduled_update_to_dict(su)}), 201
 
 
 @app.route('/api/campaigns/<int:campaign_id>/updates/scheduled', methods=['GET'])
 def get_scheduled_updates(campaign_id):
     """Get scheduled updates for a campaign"""
-    updates = ScheduledUpdate.query.filter_by(
-        campaign_id=campaign_id,
-        is_published=False
-    ).order_by(ScheduledUpdate.scheduled_for).all()
-    return jsonify({'scheduled_updates': [u.to_dict() for u in updates]})
+    updates = ScheduledUpdate.query.filter_by(campaign_id=campaign_id, is_published=False).order_by(ScheduledUpdate.scheduled_for).all()
+    return jsonify({'scheduled_updates': [campaign_update_to_dict(u) for u in updates]})
 
 
 # ============== PHASE 2: ENHANCED ANALYTICS ==============
@@ -1837,40 +1833,43 @@ def get_scheduled_updates(campaign_id):
 @app.route('/api/campaigns/<int:campaign_id>/analytics/detailed', methods=['GET'])
 def get_detailed_analytics(campaign_id):
     """Get detailed analytics with chart data"""
-    campaign = Campaign.query.get_or_404(campaign_id)
+    campaign = Campaign.query.get(campaign_id)
+    if not campaign:
+        abort(404)
     
     # Get investments over time for chart
-    investments = Investment.query.filter_by(campaign_id=campaign_id).order_by(Investment.created_at).all()
+    investments = Investment.query.filter_by(campaign_id=campaign_id).order_by(Investment.created_at.asc()).all()
     
-    # Build daily funding data
     from datetime import datetime, timedelta
     daily_data = {}
     running_total = 0
     for inv in investments:
-        date_key = inv.created_at.strftime('%Y-%m-%d')
-        running_total += inv.amount
+        dt = inv.created_at
+        date_key = dt.strftime('%Y-%m-%d') if hasattr(dt, 'strftime') else str(dt)[:10]
+        running_total += (inv.amount or 0)
         daily_data[date_key] = running_total
     
-    # Get analytics events
     events = AnalyticsEvent.query.filter_by(campaign_id=campaign_id).all()
     view_count = len([e for e in events if e.event_type == 'view'])
     share_count = len([e for e in events if e.event_type == 'share'])
     
-    # Calculate conversion rate
-    conversion_rate = (campaign.backers_count / max(campaign.views_count, 1)) * 100
+    bc = (campaign.backers_count or 0)
+    vc = (campaign.views_count or 0)
+    ar = (campaign.amount_raised or 0)
+    conversion_rate = (bc / max(vc, 1)) * 100
     
     return jsonify({
-        'campaign': campaign.to_dict(),
+        'campaign': campaign_to_dict(campaign),
         'chart_data': {
             'labels': list(daily_data.keys()),
             'values': list(daily_data.values())
         },
         'stats': {
-            'views': campaign.views_count,
+            'views': vc,
             'shares': share_count,
-            'backers': campaign.backers_count,
+            'backers': bc,
             'conversion_rate': round(conversion_rate, 2),
-            'avg_investment': round(campaign.amount_raised / max(campaign.backers_count, 1), 2)
+            'avg_investment': round(ar / max(bc, 1), 2)
         }
     })
 
@@ -1879,21 +1878,15 @@ def get_detailed_analytics(campaign_id):
 def track_analytics_event(campaign_id):
     """Track an analytics event"""
     data = request.json
-    event = AnalyticsEvent(
-        campaign_id=campaign_id,
-        event_type=data.get('event_type', 'view'),
-        user_id=data.get('user_id'),
-        amount=data.get('amount')
-    )
-    db.session.add(event)
-    
-    # Increment view count if view event
+    evt = AnalyticsEvent(
+campaign_id=campaign_id,
+        event_type=data.get('event_type', 'view'), user_id=data.get('user_id'),
+        amount=data.get('amount'))
+    db.session.add(evt); db.session.commit()
     if data.get('event_type') == 'view':
-        campaign = Campaign.query.get(campaign_id)
-        if campaign:
-            campaign.views_count += 1
-    
-    db.session.commit()
+        c = Campaign.query.get(campaign_id)
+        if c:
+            c.views_count = (c.views_count or 0) + 1; db.session.commit()
     return jsonify({'message': 'Event tracked'})
 
 
@@ -1903,7 +1896,7 @@ def track_analytics_event(campaign_id):
 def get_campaign_team(campaign_id):
     """Get all team members for a campaign"""
     team = TeamMember.query.filter_by(campaign_id=campaign_id).all()
-    return jsonify({'team': [t.to_dict() for t in team]})
+    return jsonify({'team_members': [team_member_to_dict(t) for t in team]})
 
 
 @app.route('/api/campaigns/<int:campaign_id>/team', methods=['POST'])
@@ -1914,27 +1907,22 @@ def add_team_member(campaign_id):
     if not data.get('name') or not data.get('role'):
         return jsonify({'error': 'Name and role required'}), 400
     
-    member = TeamMember(
-        campaign_id=campaign_id,
-        name=data['name'],
-        role=data['role'],
-        avatar=data.get('avatar', ''),
-        bio=data.get('bio', ''),
-        linkedin_url=data.get('linkedin_url', '')
-    )
-    
-    db.session.add(member)
-    db.session.commit()
-    
-    return jsonify({'message': 'Team member added', 'member': member.to_dict()}), 201
+    mem = TeamMember(
+campaign_id=campaign_id,
+        name=data['name'], role=data['role'],
+        avatar=data.get('avatar', ''), bio=data.get('bio', ''),
+        linkedin_url=data.get('linkedin_url', ''))
+    db.session.add(mem); db.session.commit()
+    return jsonify({'message': 'Team member added', 'member': team_member_to_dict(mem)}), 201
 
 
 @app.route('/api/team/<int:member_id>', methods=['DELETE'])
 def remove_team_member(member_id):
     """Remove a team member"""
-    member = TeamMember.query.get_or_404(member_id)
-    db.session.delete(member)
-    db.session.commit()
+    member = TeamMember.query.get(member_id)
+    if not member:
+        abort(404)
+    db.session.delete(member); db.session.commit()
     return jsonify({'message': 'Team member removed'})
 
 
@@ -1946,13 +1934,11 @@ def get_user_referral(user_id):
     referral = Referral.query.filter_by(user_id=user_id).first()
     
     if not referral:
-        # Generate new referral code
         code = f"FUND{user_id}{uuid.uuid4().hex[:6].upper()}"
-        referral = Referral(user_id=user_id, code=code)
-        db.session.add(referral)
-        db.session.commit()
+        referral = Referral(user_id=user_id, code=code, uses_count=0, reward_amount=0.0, is_active=True)
+        db.session.add(referral); db.session.commit()
     
-    return jsonify({'referral': referral.to_dict()})
+    return jsonify({'referral': referral_to_dict(referral)})
 
 
 @app.route('/api/referral/<code>/validate', methods=['GET'])
@@ -1963,9 +1949,10 @@ def validate_referral(code):
     if not referral:
         return jsonify({'valid': False, 'error': 'Invalid or inactive referral code'}), 404
     
+    user = User.query.get(referral.user_id)
     return jsonify({
         'valid': True,
-        'referrer_name': referral.user.name if referral.user else None
+        'referrer_name': user.name if user else None
     })
 
 
@@ -1978,31 +1965,27 @@ def use_referral(code):
     if not referral:
         return jsonify({'error': 'Invalid referral code'}), 404
     
-    # Record the use
     use = ReferralUse(
-        referral_id=referral.id,
-        referred_user_id=data.get('user_id'),
-        campaign_id=data.get('campaign_id'),
-        investment_amount=data.get('amount', 0)
-    )
+referral_id=referral.id,
+        referred_user_id=data.get('user_id'), campaign_id=data.get('campaign_id'),
+        investment_amount=data.get('amount', 0))
+    db.session.add(use); db.session.commit()
+    reward_add = data.get('amount', 0) * 0.05
+    referral.uses_count = (referral.uses_count or 0) + 1; referral.reward_amount = (referral.reward_amount or 0) + reward_add; db.session.commit()
     
-    referral.uses_count += 1
-    referral.reward_amount += data.get('amount', 0) * 0.05  # 5% reward
-    
-    db.session.add(use)
-    db.session.commit()
-    
-    return jsonify({'message': 'Referral recorded', 'referral': referral.to_dict()})
+    updated = Referral.query.get(referral.id)
+    return jsonify({'message': 'Referral recorded', 'referral': referral_to_dict(updated)})
 
 
 
 # ============== INITIALIZATION ==============
 
 def init_db():
-    """Initialize database"""
+    """Initialize SQLite database"""
     with app.app_context():
         db.create_all()
-        print("✅ Database initialized")
+        _run_schema_migrations()
+    print("✅ SQLite database initialized")
 
 
 if __name__ == '__main__':

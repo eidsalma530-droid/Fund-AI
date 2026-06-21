@@ -7,7 +7,8 @@ import Home from './pages/Home';
 import Campaigns from './pages/Campaigns';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
-import Dashboard from './pages/Dashboard';
+import CreatorDashboard from './pages/CreatorDashboard';
+import InvestorDashboard from './pages/InvestorDashboard';
 import CreateCampaign from './pages/CreateCampaign';
 import CampaignDetail from './pages/CampaignDetail';
 import Categories from './pages/Categories';
@@ -119,6 +120,28 @@ const GuestRoute = ({ children }) => {
   return children;
 };
 
+// Creator-only routes (create campaigns, analytics, etc.)
+const CreatorRoute = ({ children }) => {
+  const { user, isAuthenticated, sessionVerified } = useAuthStore();
+
+  if (!sessionVerified) return null;
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (user?.role !== 'creator') {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  return children;
+};
+
+const RoleDashboard = () => {
+  const user = useAuthStore((state) => state.user);
+  return user?.role === 'creator' ? <CreatorDashboard /> : <InvestorDashboard />;
+};
+
 function App() {
   const verifySession = useAuthStore((state) => state.verifySession);
 
@@ -169,14 +192,14 @@ function App() {
 
           {/* Protected Routes */}
           <Route path="/complete-profile" element={<ProtectedRoute><CompleteProfile /></ProtectedRoute>} />
-          <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-          <Route path="/create" element={<ProtectedRoute><CreateCampaign /></ProtectedRoute>} />
+          <Route path="/dashboard" element={<ProtectedRoute><RoleDashboard /></ProtectedRoute>} />
+          <Route path="/create" element={<CreatorRoute><CreateCampaign /></CreatorRoute>} />
           <Route path="/messages" element={<ProtectedRoute><Messages /></ProtectedRoute>} />
           <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
           <Route path="/profile/:userId" element={<Profile />} />
           <Route path="/bookmarks" element={<ProtectedRoute><Bookmarks /></ProtectedRoute>} />
-          <Route path="/edit-campaign/:id" element={<ProtectedRoute><EditCampaign /></ProtectedRoute>} />
-          <Route path="/analytics/:id" element={<ProtectedRoute><Analytics /></ProtectedRoute>} />
+          <Route path="/edit-campaign/:id" element={<CreatorRoute><EditCampaign /></CreatorRoute>} />
+          <Route path="/analytics/:id" element={<CreatorRoute><Analytics /></CreatorRoute>} />
 
           {/* Admin Route */}
           <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />

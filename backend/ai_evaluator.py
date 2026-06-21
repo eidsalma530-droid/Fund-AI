@@ -7,6 +7,9 @@ Falls back to mock predictions if ML libraries unavailable
 import os
 import sys
 import random
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Fix Windows console encoding
 if sys.platform == 'win32':
@@ -68,7 +71,7 @@ except ImportError:
     print("[INFO] google-genai not installed. Gemini advice will be unavailable.")
 
 # Configuration
-GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', 'AIzaSyAprF2acxWXU5L3PSO6MtTXXFzJsaj-zsU')
+GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '').strip()
 MODEL_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # Parent directory
 MAX_LEN = 30
 
@@ -368,9 +371,9 @@ Give a final GO / REVISE / RETHINK recommendation with a clear explanation.
 IMPORTANT: Be specific, cite real Kickstarter data patterns where relevant, and make every sentence actionable. Do NOT be generic. This creator is counting on you."""
         
         try:
-            print("[INFO] Calling Gemini 3-flash-preview for valuation report...")
+            print("[INFO] Calling Gemini 2.5-flash for valuation report...")
             response = client.models.generate_content(
-                model="gemini-3-flash-preview",
+                model="gemini-2.5-flash",
                 contents=prompt
             )
             print(f"[OK] Gemini response received ({len(response.text)} chars)")
@@ -379,12 +382,12 @@ IMPORTANT: Be specific, cite real Kickstarter data patterns where relevant, and 
             print(f"[WARN] Gemini 2.5-flash error: {e}")
             # Fallback to older model
             try:
-                print(f"[INFO] Gemini 3 unavailable, trying 2.5-flash...")
+                print(f"[INFO] Gemini 2.5-flash unavailable, trying 2.0-flash...")
                 response = client.models.generate_content(
-                    model="gemini-2.5-flash",
+                    model="gemini-2.0-flash",
                     contents=prompt
                 )
-                print(f"[OK] Gemini 2.5 response received ({len(response.text)} chars)")
+                print(f"[OK] Gemini 2.0-flash response received ({len(response.text)} chars)")
                 return response.text
             except Exception as e2:
                 print(f"[WARN] Gemini 2.0-flash error: {e2}")

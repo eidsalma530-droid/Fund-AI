@@ -9,7 +9,8 @@ import toast from 'react-hot-toast';
 const Messages = () => {
     const { user, isAuthenticated } = useAuthStore();
     const [searchParams] = useSearchParams();
-    const [messages, setMessages] = useState([]);
+    const [inboxMessages, setInboxMessages] = useState([]);
+    const [sentMessages, setSentMessages] = useState([]);
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState('inbox');
     const [showCompose, setShowCompose] = useState(false);
@@ -37,7 +38,11 @@ const Messages = () => {
     const fetchMessages = async () => {
         try {
             const data = await messagesAPI.getAll(user.id);
-            setMessages(data.messages || []);
+            setInboxMessages(data.inbox || []);
+            setSentMessages(data.sent || []);
+            window.dispatchEvent(new CustomEvent('fundai-messages-updated', {
+                detail: { unread_count: data.unread_count || 0 },
+            }));
         } catch (error) {
             console.error('Failed to fetch messages:', error);
         } finally {
@@ -48,7 +53,7 @@ const Messages = () => {
     const handleMarkRead = async (messageId) => {
         try {
             await messagesAPI.markRead(messageId);
-            setMessages(prev => prev.map(m => m.id === messageId ? { ...m, is_read: true } : m));
+            setInboxMessages(prev => prev.map(m => m.id === messageId ? { ...m, is_read: true } : m));
         } catch (error) {
             console.error('Failed to mark message as read');
         }
@@ -108,8 +113,6 @@ const Messages = () => {
         setShowCompose(true);
     };
 
-    const inboxMessages = messages.filter(m => m.recipient_id === user?.id);
-    const sentMessages = messages.filter(m => m.sender_id === user?.id);
     const displayMessages = activeTab === 'inbox' ? inboxMessages : sentMessages;
     const unreadCount = inboxMessages.filter(m => !m.is_read).length;
 

@@ -55,10 +55,11 @@ async function fetchAPI(endpoint, options = {}) {
 export const authAPI = {
     signup: (data) => fetchAPI('/auth/signup', { method: 'POST', body: data }),
     login: (data) => fetchAPI('/auth/login', { method: 'POST', body: data }),
-    firebaseLogin: (idToken) => fetchAPI('/auth/firebase-login', { method: 'POST', body: { idToken } }),
+    firebaseLogin: (idToken, role) => fetchAPI('/auth/firebase-login', { method: 'POST', body: { idToken, role } }),
     completeProfile: (data) => fetchAPI('/auth/complete-profile', { method: 'POST', body: data }),
     verifyToken: () => fetchAPI('/auth/verify-token', { method: 'POST' }),
     changePassword: (data) => fetchAPI('/auth/change-password', { method: 'POST', body: data }),
+    switchRole: (role) => fetchAPI('/auth/switch-role', { method: 'POST', body: { role } }),
     sendVerification: (email) => fetchAPI('/auth/send-verification', { method: 'POST', body: { email } }),
     verifyEmail: (email, token) => fetchAPI('/auth/verify-email', { method: 'POST', body: { email, token } }),
 };
@@ -95,8 +96,8 @@ export const updatesAPI = {
     getAll: (campaignId) => fetchAPI(`/campaigns/${campaignId}/updates`),
     create: (campaignId, data) => fetchAPI(`/campaigns/${campaignId}/updates`, { method: 'POST', body: data }),
     delete: (campaignId, updateId) => fetchAPI(`/campaigns/${campaignId}/updates/${updateId}`, { method: 'DELETE' }),
-    schedule: (campaignId, data) => fetchAPI(`/campaigns/${campaignId}/schedule-update`, { method: 'POST', body: data }),
-    getScheduled: (campaignId) => fetchAPI(`/campaigns/${campaignId}/scheduled-updates`),
+    schedule: (campaignId, data) => fetchAPI(`/campaigns/${campaignId}/updates/schedule`, { method: 'POST', body: data }),
+    getScheduled: (campaignId) => fetchAPI(`/campaigns/${campaignId}/updates/scheduled`),
 };
 
 // Comments API

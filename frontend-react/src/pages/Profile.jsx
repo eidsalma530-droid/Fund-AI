@@ -5,14 +5,20 @@ import { FiCamera, FiEdit2, FiSave, FiX, FiTrendingUp, FiDollarSign, FiClock, Fi
 import toast from 'react-hot-toast';
 import useAuthStore from '../store/authStore';
 import { userAPI, referralsAPI, reviewsAPI, authAPI, SERVER_BASE } from '../services/api';
+import RoleSwitchToggle from '../components/RoleSwitchToggle';
 
 const Profile = () => {
     const { userId } = useParams(); // For viewing other users
     const { user: currentUser, isAuthenticated, updateUser } = useAuthStore();
 
-    // Determine if viewing own profile or another user's
-    const isOwnProfile = !userId || (currentUser && parseInt(userId) === currentUser.id);
-    const viewingUserId = isOwnProfile ? currentUser?.id : parseInt(userId);
+    const targetProfileId = userId ? Number(userId) : currentUser?.id;
+    const isOwnProfile = Boolean(
+        isAuthenticated &&
+        currentUser?.id &&
+        targetProfileId != null &&
+        Number(targetProfileId) === Number(currentUser.id)
+    );
+    const viewingUserId = targetProfileId;
 
     const [profileUser, setProfileUser] = useState(null);
     const [isEditing, setIsEditing] = useState(false);
@@ -24,6 +30,7 @@ const Profile = () => {
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState('investments');
     const [verificationSent, setVerificationSent] = useState(false);
+    const [switchingRole, setSwitchingRole] = useState(false);
     const fileInputRef = useRef(null);
 
     useEffect(() => {
@@ -145,6 +152,23 @@ const Profile = () => {
         }
     };
 
+    const handleRoleSwitch = async (newRole) => {
+        if (!currentUser || newRole === currentUser.role) return;
+
+        setSwitchingRole(true);
+        try {
+            const data = await authAPI.switchRole(newRole);
+            updateUser(data.user);
+            setProfileUser(data.user);
+            setBio(data.user.about || '');
+            toast.success(data.message || 'Account type updated');
+        } catch (error) {
+            toast.error(error.message || 'Failed to switch account type');
+        } finally {
+            setSwitchingRole(false);
+        }
+    };
+
     // Only require login for viewing OWN profile
     if (isOwnProfile && !isAuthenticated) {
         return (
@@ -251,11 +275,13 @@ const Profile = () => {
                         </motion.div>
 
                         {/* Profile Info */}
-                        <div className="flex-1">
-                            <div className="flex items-center justify-between gap-4 mb-2">
-                                <div className="flex items-center gap-4 flex-wrap">
-                                    <h1 className="text-3xl font-bold">{profileUser?.name}</h1>
-                                    <span className={`px-3 py-1 rounded-full text-sm font-medium ${profileUser?.role === 'creator'
+                        <div className="flex-1 min-w-0 w-full">
+                            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-2">
+                                <div className="flex items-center gap-2 min-w-0 w-full overflow-x-auto pb-1 scrollbar-thin">
+                                    <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold shrink-0 max-w-[140px] sm:max-w-[200px] lg:max-w-none truncate">
+                                        {profileUser?.name}
+                                    </h1>
+                                    <span className={`px-2.5 py-1 rounded-full text-xs sm:text-sm font-medium shrink-0 ${profileUser?.role === 'creator'
                                         ? 'bg-purple-500/20 text-purple-400'
                                         : profileUser?.role === 'admin'
                                             ? 'bg-red-500/20 text-red-400'
@@ -263,7 +289,6 @@ const Profile = () => {
                                         }`}>
                                         {profileUser?.role === 'creator' ? '🎨 Creator' : profileUser?.role === 'admin' ? '👑 Admin' : '💼 Investor'}
                                     </span>
-                                    {/* User ID with Copy Button */}
                                     <motion.button
                                         whileHover={{ scale: 1.05 }}
                                         whileTap={{ scale: 0.95 }}
@@ -271,12 +296,20 @@ const Profile = () => {
                                             navigator.clipboard.writeText(String(profileUser?.id));
                                             toast.success('User ID copied! 📋');
                                         }}
-                                        className="px-3 py-1 rounded-full text-sm font-medium bg-white/10 text-white/80 hover:bg-white/20 flex items-center gap-2 transition-colors"
+                                        className="px-2.5 py-1 rounded-full text-xs sm:text-sm font-medium bg-white/10 text-white/80 hover:bg-white/20 flex items-center gap-1.5 transition-colors shrink-0"
                                         title="Click to copy User ID"
                                     >
                                         <FiCopy size={12} />
                                         ID: {profileUser?.id}
                                     </motion.button>
+                                    {isOwnProfile && (
+                                        <RoleSwitchToggle
+                                            compact
+                                            role={currentUser?.role || profileUser?.role}
+                                            onSwitch={handleRoleSwitch}
+                                            loading={switchingRole}
+                                        />
+                                    )}
                                 </div>
                                 {/* Message button for viewing other users */}
                                 {!isOwnProfile && isAuthenticated && (
